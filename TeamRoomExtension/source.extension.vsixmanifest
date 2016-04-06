@@ -1,10 +1,12 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
-    <Identity Id="TeamRoomExtension.Chris Cassidy.7a63638e-42ea-443b-871b-648fcab5e71e" Version="1.0.6" Language="en-US" Publisher="Chris Cassidy" />
-    <DisplayName>TeamRoomExtension</DisplayName>
-    <Description xml:space="preserve">Team Room chat</Description>
-    <Icon>Resources\cc.ico</Icon>
+    <Identity Id="TeamRoomExtension.Chris Cassidy.7a63638e-42ea-443b-871b-648fcab5e71e" Version="1.0.14" Language="en-US" Publisher="Chris Cassidy" />
+    <DisplayName>Team Room</DisplayName>
+    <Description xml:space="preserve">Team Room extension.  Connect to a Visual Studio.
+
+Note: this is not created by microsoft</Description>
+    <Icon>Resources\comment.png</Icon>
   </Metadata>
   <Installation>
     <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[14.0]" />
