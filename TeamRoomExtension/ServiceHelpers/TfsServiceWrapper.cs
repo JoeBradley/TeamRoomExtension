@@ -25,6 +25,7 @@ using Microsoft.TeamFoundation.Framework.Client;
 using Microsoft.TeamFoundation.Framework.Common;
 using System.Windows.Media.Imaging;
 using System.IO;
+using Microsoft.VisualStudio.Services.WebApi;
 
 namespace TeamRoomExtension.ServiceHelpers
 {
@@ -52,6 +53,8 @@ namespace TeamRoomExtension.ServiceHelpers
                 if (_tpc == null)
                     _tpc = new TfsTeamProjectCollection(connectionUri, new TfsClientCredentials());
                 _tpc.EnsureAuthenticated();
+                if (!_tpc.HasAuthenticated)
+                    _tpc.Authenticate();
                 return _tpc;
             }
         }
@@ -81,9 +84,16 @@ namespace TeamRoomExtension.ServiceHelpers
 
         public static IEnumerable<RegisteredProjectCollection> GetProjectCollections()
         {
-            // Get Project Collections
-            var pc = RegisteredTfsConnections.GetProjectCollections();
-            return pc.ToList();
+            try {
+                // Get Project Collections
+                var pc = RegisteredTfsConnections.GetProjectCollections();
+                return pc.ToList();
+            }
+            catch (Exception ex)
+            {
+            }
+
+            return null;
         }
 
         public static async Task<List<Room>> GetRoomsAsync(Uri uri)
@@ -131,19 +141,39 @@ namespace TeamRoomExtension.ServiceHelpers
 
                 var chatClient = tpc.GetClient<ChatHttpClient>();
                 var users = await chatClient.GetChatRoomUsersAsync(roomId);
+                userImages = GetUserProfileImages(users.Select(x => x.UserRef).ToList());
+            }
+            catch (Exception ex)
+            {
+            }
+
+            return userImages;
+        }
+
+        public static Dictionary<string, byte[]> GetUserProfileImages(List<IdentityRef> users)
+        {
+            var userImages = new Dictionary<string, byte[]>();
+            try
+            {
+                var client = tpc.GetService<IIdentityManagementService2>();
+
                 foreach (var user in users)
                 {
-                    var client = tpc.GetService<IIdentityManagementService2>();
-                    var i = client.ReadIdentity(IdentitySearchFactor.DisplayName, user.UserRef.DisplayName, MembershipQuery.Expanded, ReadIdentityOptions.ExtendedProperties);
-
-                    object attr;
-                    if (i.TryGetProperty("Microsoft.TeamFoundation.Identity.Image.Data", out attr))
+                    if (!userImages.Keys.Contains(user.Id))
                     {
-                        userImages.Add(user.UserRef.Id, attr as byte[]);
+                        var ci = client.ReadIdentity(IdentitySearchFactor.DisplayName, user.DisplayName, MembershipQuery.Expanded, ReadIdentityOptions.ExtendedProperties);
+
+                        object attr;
+                        if (ci.TryGetProperty("Microsoft.TeamFoundation.Identity.Image.Data", out attr))
+                        {
+                            userImages.Add(user.Id, attr as byte[]);
+                        }
                     }
                 }
             }
-            catch { }
+            catch(Exception ex)
+            {
+            }
 
             return userImages;
         }

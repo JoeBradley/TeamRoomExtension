@@ -127,6 +127,8 @@ namespace TeamRoomExtension.ServiceHelpers
                         //    new Message { Content = "Another Message", Id= new Random().Next(), PostedTime= DateTime.UtcNow },
                         //    new Message { Content = "Heaps more Messages", Id= new Random().Next(), PostedTime= DateTime.UtcNow },
                         //};
+                        var profiles = TfsServiceWrapper.GetUserProfileImages(messages.Select(x => x.PostedBy).Distinct().ToList());
+                        UserWorker.Instance.GetProfiles(profiles);
                         worker.ReportProgress(1, new MessagesProgress() { Messages = messages });
                         if (!worker.CancellationPending)
                         {
@@ -146,6 +148,10 @@ namespace TeamRoomExtension.ServiceHelpers
                         e.Cancel = true;
                     }
                     //e.Result = new WorkerCompleteObject { Identifier = args.Name, Status = "Incomplete" };
+                }
+                else
+                {
+                    // could not lock critical section
                 }
             }
             catch (Exception ex)
@@ -201,10 +207,12 @@ namespace TeamRoomExtension.ServiceHelpers
                         //    Console.WriteLine("Worker complete");
                         //}
                     }
+                    this.ReportComplete(this, e.Result as MessageWorkerCompleteResult);
                 }
-                this.ReportComplete(this, e.Result as MessageWorkerCompleteResult);
             }
-            catch { }
+            catch (Exception ex)
+            {
+            }
             
         }
         

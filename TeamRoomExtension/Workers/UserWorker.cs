@@ -10,7 +10,7 @@ namespace TeamRoomExtension.ServiceHelpers
     public sealed class UserWorker
     {
         #region Const
-        private string[] defaultColors = new[] { "#ff1F8A70", "#ffBEDB39", "#ffFFE11A", "#ffFD7400", "ff004358" };
+        private string[] defaultColors = new[] { "#ffff6138", "#ff00a388","#fffffb8c", "#ffbeeb9f", "#ff79bd8f" };
 
         #endregion
 
@@ -103,18 +103,8 @@ namespace TeamRoomExtension.ServiceHelpers
                 // Get Lock
                 if (Monitor.TryEnter(CritSectionLock, 2 * 1000))
                 {
-                    var profiles = TfsServiceWrapper.GetUserProfileImages(args.Uri, args.RoomId).Result;
-                    foreach (KeyValuePair<string, byte[]> profile in profiles)
-                    {
-                        if (!ProfileImages.Keys.Contains(profile.Key))
-                            ProfileImages.Add(profile.Key, profile.Value);
-                        if (!ProfileColors.Keys.Contains(profile.Key))
-                        {
-                            string hex = defaultColors[ProfileColors.Count % defaultColors.Length];
-                            Color c = (Color)ColorConverter.ConvertFromString(hex);
-                            ProfileColors.Add(profile.Key, c);
-                        }
-                    }
+                    Dictionary<string,byte[]> profiles = TfsServiceWrapper.GetUserProfileImages(args.Uri, args.RoomId).Result;
+                    UserWorker.Instance.GetProfiles(profiles);
                     RoomsLoaded.Add(args.RoomId);
                     e.Result = true;
                 }
@@ -138,5 +128,20 @@ namespace TeamRoomExtension.ServiceHelpers
         }
 
         #endregion
+
+        public void GetProfiles(Dictionary<string, byte[]> profiles)
+        {
+            foreach (KeyValuePair<string, byte[]> profile in profiles)
+            {
+                if (!ProfileImages.Keys.Contains(profile.Key))
+                    ProfileImages.Add(profile.Key, profile.Value);
+                if (!ProfileColors.Keys.Contains(profile.Key))
+                {
+                    string hex = defaultColors[ProfileColors.Count % defaultColors.Length];
+                    Color c = (Color)ColorConverter.ConvertFromString(hex);
+                    ProfileColors.Add(profile.Key, c);
+                }
+            }
+        }
     }
 }

@@ -213,7 +213,7 @@ namespace TeamRoomExtension
                 teamRoom = cmbRoomList.SelectedValue as Room;
                 if (teamRoom != null)
                 {
-                    UserWorker.Instance.DoWork(info.ServerUri, teamRoom.Id);
+                    //UserWorker.Instance.DoWork(info.ServerUri, teamRoom.Id);
                     MessagesWatcher.Instance.DoWork(info.ServerUri, teamRoom.Id);
                 }
             }

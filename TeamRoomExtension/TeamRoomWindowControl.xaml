@@ -12,7 +12,6 @@
     <UserControl.Resources>
         <ServiceHelpers:ImageUriConverter x:Key="ImageUriConverter"/>
         <ServiceHelpers:ProfileColorConverter x:Key="ProfileColorConverter"/>
-        <!--<local:BitmapImageConverter x:Key="BitmapImageConverter"/>-->
     </UserControl.Resources>
     <DockPanel LastChildFill="True">
         <StackPanel DockPanel.Dock="Top" VerticalAlignment="Top">
@@ -55,7 +54,8 @@
                     <DataTemplate>
                         <DockPanel Margin="10,5">
                             <!--<Ellipse Width="32" Height="32" Margin="0,0,5,0" VerticalAlignment="Top" DockPanel.Dock="Left" Stroke="{DynamicResource {x:Static SystemColors.GradientInactiveCaptionBrushKey}}" StrokeThickness="2">-->
-                            <Ellipse Width="32" Height="32" Margin="0,0,5,0" VerticalAlignment="Top" DockPanel.Dock="Left" Stroke="{Binding PostedBy.Id, Converter={StaticResource ProfileColorConverter}, Mode=OneWay}" StrokeThickness="2">
+                            <Ellipse Width="32" Height="32" Margin="0,0,5,0" VerticalAlignment="Top" DockPanel.Dock="Left" Stroke="{Binding PostedBy.Id, Converter={StaticResource ProfileColorConverter}, Mode=OneWay}" StrokeThickness="2" 
+                                     ToolTip="{Binding PostedBy.DisplayName}">
                                     <Ellipse.Fill>
                                     <ImageBrush ImageSource="{Binding PostedBy.Id, Converter={StaticResource ImageUriConverter}, Mode=OneWay}" Stretch="UniformToFill"/>
                                     <!--<ImageBrush ImageSource="Resources/Profile.JPG" Stretch="UniformToFill"/>-->
