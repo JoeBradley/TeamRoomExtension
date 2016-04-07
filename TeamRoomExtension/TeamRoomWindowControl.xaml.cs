@@ -128,7 +128,7 @@ namespace TeamRoomExtension
             {
                 info = TfsServiceWrapper.GetWorkspaceInfo();
                 var pcs = TfsServiceWrapper.GetProjectCollections();
-
+                
                 if (info != null)
                 {
                     lblConnectionName.Text = info.ServerUri.ToString();
