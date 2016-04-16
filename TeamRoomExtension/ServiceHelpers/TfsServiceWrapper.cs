@@ -4,6 +4,8 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
+using Microsoft.VisualStudio.Services.WebApi;
+
 // https://www.nuget.org/packages/Microsoft.TeamFoundationServer.Client/
 using Microsoft.TeamFoundation.WorkItemTracking.WebApi;
 using Microsoft.TeamFoundation.WorkItemTracking.WebApi.Models;
@@ -23,9 +25,6 @@ using Microsoft.TeamFoundation.VersionControl.Client;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
 using Microsoft.TeamFoundation.Framework.Client;
 using Microsoft.TeamFoundation.Framework.Common;
-using System.Windows.Media.Imaging;
-using System.IO;
-using Microsoft.VisualStudio.Services.WebApi;
 
 namespace TeamRoomExtension.ServiceHelpers
 {
@@ -59,28 +58,28 @@ namespace TeamRoomExtension.ServiceHelpers
             }
         }
 
-        public static WorkspaceInfo GetWorkspaceInfo()
-        {
-            //// Get Project Collections
-            //var pc = RegisteredTfsConnections.GetProjectCollections();
-            //result.AppendLine("Registered Projects");
-            //foreach (var item in pc)
-            //{
-            //    result.AppendLine(String.Format("Name: {0}, Uri: {1}, Offline: {2}",
-            //        item.DisplayName, item.Uri.ToString(), item.Offline));
-            //}
-            try
-            {
-                var info = Workstation.Current.GetAllLocalWorkspaceInfo();
-                if (info.Any())
-                    return info.FirstOrDefault();
-            }
-            catch (Exception)
-            {
+        //public static WorkspaceInfo GetWorkspaceInfo()
+        //{
+        //    //// Get Project Collections
+        //    //var pc = RegisteredTfsConnections.GetProjectCollections();
+        //    //result.AppendLine("Registered Projects");
+        //    //foreach (var item in pc)
+        //    //{
+        //    //    result.AppendLine(String.Format("Name: {0}, Uri: {1}, Offline: {2}",
+        //    //        item.DisplayName, item.Uri.ToString(), item.Offline));
+        //    //}
+        //    try
+        //    {
+        //        var info = Workstation.Current.GetAllLocalWorkspaceInfo();
+        //        if (info.Any())
+        //            return info.FirstOrDefault();
+        //    }
+        //    catch (Exception)
+        //    {
 
-            }
-            return null;
-        }
+        //    }
+        //    return null;
+        //}
 
         public static IEnumerable<RegisteredProjectCollection> GetProjectCollections()
         {
@@ -105,6 +104,23 @@ namespace TeamRoomExtension.ServiceHelpers
                 var chatClient = tpc.GetClient<ChatHttpClient>();
                 var rooms = await chatClient.GetRoomsAsync();
                 return rooms;
+
+            }
+            catch (Exception ex)
+            {
+            }
+            return null;
+        }
+
+        public static async Task<List<User>> GetRoomUsersAsync(Uri uri, int roomId)
+        {
+            try
+            {
+                connectionUri = uri;
+
+                var chatClient = tpc.GetClient<ChatHttpClient>();
+                var users = await chatClient.GetChatRoomUsersAsync(roomId);
+                return users;
 
             }
             catch (Exception ex)

@@ -1,11 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.ComponentModel;
 using System.Threading;
 using Microsoft.TeamFoundation.Chat.WebApi;
+using Microsoft.VisualStudio.Services.WebApi;
 
 namespace TeamRoomExtension.ServiceHelpers
 {
@@ -32,6 +31,10 @@ namespace TeamRoomExtension.ServiceHelpers
         private DateTime lastMessage = DateTime.UtcNow;
         private DateTime minDate = new DateTime(DateTime.UtcNow.Year, 1, 1);
 
+        private Uri ProjectionCollectionUri;
+        private int RoomId;
+
+
         private MessagesWatcher()
         {
             worker = CreateWorker();
@@ -54,15 +57,19 @@ namespace TeamRoomExtension.ServiceHelpers
             }
         }
 
-        public Boolean DoWork(Uri connectionUri, int roomId)
+        public Boolean DoWork(Uri projectionCollectionUri, int roomId)
         {
             try
             {
-                if (worker != null && worker.IsBusy) return false;
+                ProjectionCollectionUri = projectionCollectionUri;
+                RoomId = roomId;
 
+                if (worker != null && worker.IsBusy)
+                    return false;
+                
                 if (worker == null) worker = CreateWorker();
 
-                worker.RunWorkerAsync(new MessageWorkerEventArgs() { ConnectionUri = connectionUri, RoomId = roomId });
+                worker.RunWorkerAsync();
                 return true;
             }
             catch (Exception ex)
@@ -121,12 +128,7 @@ namespace TeamRoomExtension.ServiceHelpers
 
                     while (!worker.CancellationPending)
                     {
-                        var messages = TfsServiceWrapper.GetRoomMessagesAsync(args.ConnectionUri, args.RoomId).Result;
-                        //var messages = new List<Message> {
-                        //    new Message { Content = "New Message", Id= new Random().Next(), PostedTime= DateTime.UtcNow },
-                        //    new Message { Content = "Another Message", Id= new Random().Next(), PostedTime= DateTime.UtcNow },
-                        //    new Message { Content = "Heaps more Messages", Id= new Random().Next(), PostedTime= DateTime.UtcNow },
-                        //};
+                        var messages = TfsServiceWrapper.GetRoomMessagesAsync(ProjectionCollectionUri, RoomId).Result;
                         var profiles = TfsServiceWrapper.GetUserProfileImages(messages.Select(x => x.PostedBy).Distinct().ToList());
                         UserWorker.Instance.GetProfiles(profiles);
                         worker.ReportProgress(1, new MessagesProgress() { Messages = messages });

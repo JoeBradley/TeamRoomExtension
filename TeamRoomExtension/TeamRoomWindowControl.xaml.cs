@@ -3,26 +3,44 @@
 //     Copyright (c) Company.  All rights reserved.
 // </copyright>
 //------------------------------------------------------------------------------
-using System.Linq;
-using Microsoft.TeamFoundation.Chat.WebApi;
-using System.Diagnostics;
 
 namespace TeamRoomExtension
 {
-    using Microsoft.TeamFoundation.VersionControl.Client;
+    using System.Linq;
+    using System.Diagnostics;
     using ServiceHelpers;
     using System;
     using System.Collections.Generic;
     using System.Collections.ObjectModel;
     using System.ComponentModel;
-    using System.Globalization;
-    using System.Threading.Tasks;
     using System.Web;
     using System.Windows;
     using System.Windows.Controls;
-    using System.Windows.Data;
+    //using Microsoft.TeamFoundation.Chat.WebApi;
+    //using Microsoft.TeamFoundation.Client;
+
+    using Microsoft.VisualStudio.Services.WebApi;
+
+    // https://www.nuget.org/packages/Microsoft.TeamFoundationServer.Client/
+    using Microsoft.TeamFoundation.WorkItemTracking.WebApi;
+    using Microsoft.TeamFoundation.WorkItemTracking.WebApi.Models;
+
+    // https://www.nuget.org/packages/Microsoft.VisualStudio.Services.InteractiveClient/
+    using Microsoft.VisualStudio.Services.Client;
+
+    // https://www.nuget.org/packages/Microsoft.VisualStudio.Services.Client/
+    using Microsoft.VisualStudio.Services.Common;
+
+    // https://www.nuget.org/packages/Microsoft.TeamFoundationServer.ExtendedClient/
+    using Microsoft.TeamFoundation.Client;
+    using Microsoft.TeamFoundation.Chat.WebApi;
+    using Microsoft.TeamFoundation.VersionControl.Client;
+
+    // https://www.nuget.org/packages/Microsoft.TeamFoundationServer.Client/
+    using Microsoft.TeamFoundation.SourceControl.WebApi;
+    using Microsoft.TeamFoundation.Framework.Client;
+    using Microsoft.TeamFoundation.Framework.Common;
     using System.Windows.Media.Imaging;
-    using System.Windows.Threading;
 
     /// <summary>
     /// Interaction logic for TeamRoomWindowControl.
@@ -30,35 +48,17 @@ namespace TeamRoomExtension
     public partial class TeamRoomWindowControl : UserControl, INotifyPropertyChanged
     {        
         #region Private properties
-
-        WorkspaceInfo _info;
-        public WorkspaceInfo info
-        {
-            get { return _info; }
-            set
-            {
-                if (_info != value)
-                {
-                    _info = value;
-                    OnPropertyChanged("Info");
-                    LoadRooms();
-                }
-            }
-        }
-
-        User me;
+        
         Room teamRoom;
-
-        Uri collectionUri { get { return info == null ? null : info.ServerUri; } }
         Uri teamRoomUri
         {
             get
             {
                 try
                 {
-                    if (info.ServerUri == null || teamRoom == null) return null;
+                    if (projectCollection == null || teamRoom == null) return null;
 
-                    return new Uri(string.Format("{0}/_rooms?name={1}&_a=today", info.ServerUri, HttpUtility.UrlEncode(teamRoom.Name)));
+                    return new Uri(string.Format("{0}/_rooms?name={1}&_a=today", projectCollection.Uri, HttpUtility.UrlEncode(teamRoom.Name)));
                 }
                 catch (Exception)
                 {
@@ -68,19 +68,29 @@ namespace TeamRoomExtension
             }
         }
 
-        //public BoundTask<List<Room>> rooms { get; private set; }
-        ObservableCollection<WorkspaceInfo> collections = new ObservableCollection<WorkspaceInfo>();
-        public ObservableCollection<WorkspaceInfo> Collections
+        RegisteredProjectCollection projectCollection;
+
+        ObservableCollection<RegisteredProjectCollection> collections = new ObservableCollection<RegisteredProjectCollection>();
+        public ObservableCollection<RegisteredProjectCollection> Collections
         {
             get { return collections; }
             set { collections = value; OnPropertyChanged("Collections"); }
         }
+
         ObservableCollection<Room> rooms = new ObservableCollection<Room>();
         public ObservableCollection<Room> Rooms
         {
             get { return rooms; }
             set { rooms = value; OnPropertyChanged("Rooms"); }
         }
+
+        ObservableCollection<User> roomUsers = new ObservableCollection<User>();
+        public ObservableCollection<User> RoomUsers
+        {
+            get { return roomUsers; }
+            set { roomUsers = value; OnPropertyChanged("RoomUsers"); }
+        }
+
         ObservableCollection<Message> messages = new ObservableCollection<Message>();
         public ObservableCollection<Message> Messages
         {
@@ -115,24 +125,24 @@ namespace TeamRoomExtension
             MessagesWatcher.Instance.ReportComplete += MessagesWatcher_Complete;
 
             // Set the event handler directly on the background worker
-            RoomWorker.Instance.Worker.RunWorkerCompleted += Rooms_Loaded;
-
+            RoomWorker.Instance.LoadRoomsWorker.RunWorkerCompleted += Rooms_Loaded;
+            RoomWorker.Instance.LoadRoomUsersWorker.RunWorkerCompleted += RoomUsers_Loaded;
+            
             UserWorker.Instance.Worker.RunWorkerCompleted += ProfilePictures_Loaded;
 
-            LoadSettings();
+            LoadProjectCollections();
         }
 
-        private void LoadSettings()
+        private void LoadProjectCollections()
         {
             try
             {
-                info = TfsServiceWrapper.GetWorkspaceInfo();
-                var pcs = TfsServiceWrapper.GetProjectCollections();
-                
-                if (info != null)
+                foreach (var pc in TfsServiceWrapper.GetProjectCollections())
                 {
-                    lblConnectionName.Text = info.ServerUri.ToString();
+                    Collections.Add(pc);
                 }
+
+                //projectCollection = Collections.FirstOrDefault();
             }
             catch (Exception ex)
             {
@@ -146,9 +156,9 @@ namespace TeamRoomExtension
             {
                 if (txtMessage.Text.Trim(' ') == "") return;
 
-                if (teamRoom != null && info != null)
+                if (teamRoom != null && projectCollection != null)
                 {
-                    var msg = TfsServiceWrapper.PostMessage(info.ServerUri, teamRoom.Id, txtMessage.Text);
+                    var msg = TfsServiceWrapper.PostMessage(projectCollection.Uri, teamRoom.Id, txtMessage.Text);
                     //var msg = new Message() { Content = txtMessage.Text, PostedTime= DateTime.UtcNow };
                     txtMessage.Text = "";
                     Messages.Add(msg);
@@ -166,31 +176,14 @@ namespace TeamRoomExtension
             try
             {
                 Rooms.Clear();
-                if (info != null)
+                if (projectCollection != null)
                 {
-                    RoomWorker.Instance.DoWork(info.ServerUri);
+                    RoomWorker.Instance.LoadRooms(projectCollection.Uri);
                 }
             }
             catch { }
         }
-
-        //private async Task LoadRoomMessagesAsync(Uri uri, int roomId)
-        //{
-        //    Messages.Clear();
-        //    if (info == null) return;
-        //    var msgs = await TfsServiceWrapper.GetRoomMessagesAsync(uri, roomId);
-        //    foreach (var msg in msgs)
-        //    {
-        //        Messages.Add(msg);
-        //    }
-        //}
-
-        //private void LoadRoomMessages(int roomId)
-        //{
-        //    lstMessages.ItemsSource = messages.Where(x => x.PostedRoomId == roomId).ToList();
-        //    svMessages.ScrollToEnd();
-        //}
-
+        
         #region Events
         
         // Cancel Background worker threads    
@@ -200,6 +193,21 @@ namespace TeamRoomExtension
             MessagesWatcher.Instance.Cancel();
         }
 
+        private void cmbCollectionList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            try
+            {
+                projectCollection = cmbCollectionList.SelectedValue as RegisteredProjectCollection;
+                Rooms.Clear();
+                cmbRoomList.Text = "Loading rooms please wait";
+                LoadRooms();
+            }
+            catch (Exception)
+            {
+                throw;
+            }
+        }
+
         // Set the background worker to poll for messages for the selected room.
         // TODO: Handle changing rooms
         private void cmbRoomList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -207,22 +215,22 @@ namespace TeamRoomExtension
             try
             {
                 messages.Clear();
-                if (string.IsNullOrEmpty(cmbRoomList.SelectedValue.ToString()) || info == null)
+                if (string.IsNullOrEmpty(cmbRoomList.SelectedValue.ToString()) || projectCollection == null)
                     return;
 
                 teamRoom = cmbRoomList.SelectedValue as Room;
                 if (teamRoom != null)
                 {
-                    //UserWorker.Instance.DoWork(info.ServerUri, teamRoom.Id);
-                    MessagesWatcher.Instance.DoWork(info.ServerUri, teamRoom.Id);
+                    MessagesWatcher.Instance.DoWork(projectCollection.Uri, teamRoom.Id);
+                    RoomWorker.Instance.LoadRoomUsers(projectCollection.Uri, teamRoom.Id);
                 }
             }
             catch (Exception ex)
             {
-
+                // Log errors
             }
         }
-
+        
         // Post the message text
         private void btnPostMessage_Click(object sender, RoutedEventArgs e)
         {
@@ -253,7 +261,6 @@ namespace TeamRoomExtension
         
         private void MessagesWatcher_NewMessages(object sender, MessagesProgress e)
         {
-            // TODO: Add new messages to Messages;
             if (e.Messages == null || !e.Messages.Any())
                 return;
 
@@ -263,15 +270,7 @@ namespace TeamRoomExtension
                     Messages.Add(item);
             }
 
-            //lstMessages.ItemsSource = Messages;
-            svMessages.ScrollToEnd();
-            
-            //foreach (var item in e.Messages)
-            //{
-            //    if (!Messages.Contains(item))
-            //        Messages.Add(item);
-            //    svMessages.ScrollToEnd();
-            //}
+            svMessages.ScrollToEnd();            
         }
 
         private void MessagesWatcher_Complete(object sender, MessageWorkerCompleteResult e)
@@ -312,11 +311,41 @@ namespace TeamRoomExtension
             {
                 var rooms = e.Result as IEnumerable<Room>;
                 Rooms.Clear();
-                foreach (var item in rooms)
+
+                if (rooms != null)
                 {
-                    Rooms.Add(item);
+                    foreach (var item in rooms)
+                    {
+                        Rooms.Add(item);
+                    }
                 }
             } 
+        }
+
+        private void RoomUsers_Loaded(object sender, RunWorkerCompletedEventArgs e)
+        {
+            // work complete           
+            if (e.Cancelled == true)
+            {
+                Console.WriteLine("Worker canceled");
+            }
+            else if (e.Error != null)
+            {
+                Console.WriteLine("Worker error", e.Error.Message);
+            }
+            else
+            {
+                var users = e.Result as IEnumerable<User>;
+                RoomUsers.Clear();
+
+                if (users != null)
+                {
+                    foreach (var item in users)
+                    {
+                        RoomUsers.Add(item);
+                    }
+                }
+            }
         }
 
         private void ProfilePictures_Loaded(object sender, RunWorkerCompletedEventArgs e)
@@ -342,30 +371,6 @@ namespace TeamRoomExtension
         {
             // HACK: Force refresh by updating a property on each object.
             lstMessages.ItemsSource = Messages;
-        }
-
-        #region Mock Methods
-
-        private void LoadMockMessages()
-        {
-            messages.Add(new Message() { Id = 1, PostedRoomId = 1, Content = "Puffin test message", PostedTime = DateTime.Now.AddMinutes(-5) });
-            messages.Add(new Message() { Id = 2, PostedRoomId = 1, Content = "Puffin test message 2", PostedTime = DateTime.Now.AddMinutes(-2) });
-            messages.Add(new Message() { Id = 3, PostedRoomId = 1, Content = "Anna is really cute!!!", PostedTime = DateTime.Now });
-            messages.Add(new Message() { Id = 4, PostedRoomId = 2, Content = "Squirrel test message", PostedTime = DateTime.Now.AddMinutes(-5) });
-            messages.Add(new Message() { Id = 5, PostedRoomId = 2, Content = "Squirrel test message 2", PostedTime = DateTime.Now.AddMinutes(-2) });
-            messages.Add(new Message() { Id = 6, PostedRoomId = 2, Content = "Anna is really really cute!!!", PostedTime = DateTime.Now });
-        }
-
-        private void LoadMockRooms()
-        {
-            Rooms.Add(new Room() { Name = "Puffin Team Room", Id = 1 });
-            Rooms.Add(new Room() { Name = "Squirrel Team Room", Id = 2 });
-        }
-
-
-        #endregion
-        
-    }
-
-   
+        }       
+    }    
 }

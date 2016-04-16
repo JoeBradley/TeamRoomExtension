@@ -4,6 +4,12 @@ using System.Threading;
 
 namespace TeamRoomExtension.ServiceHelpers
 {
+    using Microsoft.TeamFoundation.Client;
+    using Microsoft.TeamFoundation.Chat.WebApi;
+    using Microsoft.TeamFoundation.Framework.Client;
+    using Microsoft.TeamFoundation.Framework.Common;
+    using Microsoft.VisualStudio.Services.WebApi;
+
     public sealed class RoomWorker
     {
         // Singleton Instance
@@ -14,12 +20,14 @@ namespace TeamRoomExtension.ServiceHelpers
         private static readonly object CritSectionLock = new Object();
 
         // Background worker
-        public BackgroundWorker Worker;
+        public BackgroundWorker LoadRoomsWorker;
+        public BackgroundWorker LoadRoomUsersWorker;
         public Uri connectionUri;
 
         private RoomWorker()
         {
-            Worker = CreateWorker();
+            LoadRoomsWorker = CreateWorker(LoadRoomsWorker_DoWork);
+            LoadRoomUsersWorker = CreateWorker(LoadRoomUsersWorker_DoWork);
         }
 
         public static RoomWorker Instance
@@ -39,15 +47,15 @@ namespace TeamRoomExtension.ServiceHelpers
             }
         }
 
-        public Boolean DoWork(Uri connectionUri)
+        public bool LoadRooms(Uri connectionUri)
         {
             try
             {
-                if (Worker != null && Worker.IsBusy) return false;
+                if (LoadRoomsWorker != null && LoadRoomsWorker.IsBusy) return false;
 
-                if (Worker == null) CreateWorker();
+                if (LoadRoomsWorker == null) CreateWorker(LoadRoomsWorker_DoWork);
 
-                Worker.RunWorkerAsync(connectionUri);
+                LoadRoomsWorker.RunWorkerAsync(connectionUri);
 
                 return true;
             }
@@ -58,11 +66,33 @@ namespace TeamRoomExtension.ServiceHelpers
             return false;
         }
 
-        private BackgroundWorker CreateWorker()
+        public bool LoadRoomUsers(Uri connection, int roomId)
+        {
+            try
+            {
+                if (LoadRoomUsersWorker != null && LoadRoomUsersWorker.IsBusy) return false;
+
+                if (LoadRoomUsersWorker == null) CreateWorker(LoadRoomUsersWorker_DoWork);
+
+                LoadRoomUsersWorker.RunWorkerAsync(new { Uri = connection, RoomId = roomId } );
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                //Debug.Fail(ex.Message);
+            }
+            return false;
+        }
+
+        private BackgroundWorker CreateWorker(DoWorkEventHandler doWork)
         {
             var bw = new BackgroundWorker();
 
-            bw.DoWork += new DoWorkEventHandler(BackgroundWorker_DoWork);
+            bw.WorkerReportsProgress = false;
+            bw.WorkerSupportsCancellation = false;
+
+            bw.DoWork += new DoWorkEventHandler(doWork);
 
             return bw;
         }
@@ -76,7 +106,7 @@ namespace TeamRoomExtension.ServiceHelpers
         /// </summary>
         /// <param name="sender">Background Worker</param>
         /// <param name="e">Worker State information</param>
-        private void BackgroundWorker_DoWork(object sender, DoWorkEventArgs e)
+        private void LoadRoomsWorker_DoWork(object sender, DoWorkEventArgs e)
         {
             var worker = sender as BackgroundWorker;
             var args = e.Argument as Uri;
@@ -86,9 +116,40 @@ namespace TeamRoomExtension.ServiceHelpers
                 // Get Lock
                 if (Monitor.TryEnter(CritSectionLock, 2 * 1000))
                 {
-
                     var rooms = TfsServiceWrapper.GetRoomsAsync(args).Result;
                     e.Result = rooms;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Background Worker Error: {0}", ex.Message);
+            }
+            finally
+            {
+                try
+                {
+                    // Release CritSection Lock
+                    Monitor.Exit(CritSectionLock);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("Release Locks Error: {0}", ex.Message);
+                }
+            }
+        }
+
+        private void LoadRoomUsersWorker_DoWork(object sender, DoWorkEventArgs e)
+        {
+            var worker = sender as BackgroundWorker;
+            dynamic args = e.Argument as dynamic;
+
+            try
+            {
+                // Get Lock
+                if (Monitor.TryEnter(CritSectionLock, 2 * 1000))
+                {
+                    var users = TfsServiceWrapper.GetRoomUsersAsync(args.Uri, args.RoomId).Result;
+                    e.Result = users;
                 }
             }
             catch (Exception ex)

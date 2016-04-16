@@ -17,11 +17,20 @@
         <StackPanel DockPanel.Dock="Top" VerticalAlignment="Top">
             <DockPanel>
                 <Image Width="20" Height="20" Margin="5,0" Source="Resources/CloudConnectedServices_32x.png" />
-                <TextBlock x:Name="lblConnectionName" Margin="5" HorizontalAlignment="Left" FontFamily="Arial" FontSize="14" Text="Connection Name" Foreground="#FF444444"/>
+                <ComboBox x:Name="cmbCollectionList" Margin="0,2,2,5" FontSize="16" FontFamily="Arial" ToolTip="Select Project Collection"                 
+					DataContext="{Binding ElementName=TeamRoomWindow}"
+					ItemsSource="{Binding Collections}"
+					SelectionChanged="cmbCollectionList_SelectionChanged" Background="{x:Null}" Text="Loading project collections..." >
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Uri}"/>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
             </DockPanel>
+
             <DockPanel>
                 <Image Width="20" Height="20" Margin="5,0" Source="Resources/comment.png" MouseUp="imgRoomIcon_Click"/>
-
                 <ComboBox x:Name="cmbRoomList" Margin="0,0,2,5" FontSize="16" FontFamily="Arial" ToolTip="Select Team Room"                 
 					DataContext="{Binding ElementName=TeamRoomWindow}"
 					ItemsSource="{Binding Rooms}"
@@ -33,7 +42,32 @@
                     </ComboBox.ItemTemplate>
                 </ComboBox>
             </DockPanel>
+
+            <DockPanel>
+
+                <ScrollViewer x:Name="svRoomUsers" Margin="5,0,5,10" ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Disabled" Height="38">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Top">
+                        <ItemsControl x:Name="lstRoomUsers" ScrollViewer.HorizontalScrollBarVisibility="Disabled" DataContext="{Binding ElementName=TeamRoomWindow}" ItemsSource="{Binding RoomUsers}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid HorizontalAlignment="Left" Margin="0,0,5,5">
+                                        <Ellipse Width="28" Height="28" VerticalAlignment="Top" StrokeThickness="1" Stroke="{Binding UserRef.Id, Converter={StaticResource ProfileColorConverter}, Mode=OneWay}" />
+                                        <Ellipse Width="24" Height="24" Margin="0,2,0,0" VerticalAlignment="Top" ToolTip="{Binding UserRef.DisplayName}" >
+                                            <Ellipse.Fill>
+                                                <ImageBrush ImageSource="{Binding UserRef.Id, Converter={StaticResource ImageUriConverter}, Mode=OneWay}" Stretch="UniformToFill"/>
+                                            </Ellipse.Fill>
+                                        </Ellipse>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+            </DockPanel>
+
         </StackPanel>
+
+
 
         <StackPanel DockPanel.Dock="Bottom" VerticalAlignment="Bottom" Margin="0,0,0,10">
             <TextBox x:Name="txtMessage" Height="70" Margin="10,0" Padding="5" TextWrapping="Wrap" FontFamily="Arial" FontSize="16" ToolTip="Post Message" SpellCheck.IsEnabled="True" Background="{x:Null}" Foreground="#FF444444" KeyUp="txtMessage_KeyUp"/>
@@ -61,7 +95,7 @@
                                     </Ellipse.Fill>
                                 </Ellipse>
                             </Grid>
-                            
+
                             <DockPanel DockPanel.Dock="Right">
                                 <Polygon Fill="{Binding PostedBy.Id, Converter={StaticResource ProfileColorConverter}, Mode=OneWay}" Width="10" Height="10" Points="10,0 0,5 10,10 10,0" VerticalAlignment="Top" Margin="0,10,0,0" DockPanel.Dock="Left" />
 
