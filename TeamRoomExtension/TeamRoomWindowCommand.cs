@@ -9,6 +9,8 @@ using System.ComponentModel.Design;
 using System.Globalization;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
+using Microsoft.VisualStudio.Settings;
+using Microsoft.VisualStudio.Shell.Settings;
 
 namespace TeamRoomExtension
 {
@@ -102,6 +104,26 @@ namespace TeamRoomExtension
 
             IVsWindowFrame windowFrame = (IVsWindowFrame)window.Frame;
             Microsoft.VisualStudio.ErrorHandler.ThrowOnFailure(windowFrame.Show());
+        }
+
+        // https://msdn.microsoft.com/en-us/library/dn949254.aspx
+        public void LoadUserSettings()
+        {
+            SettingsManager settingsManager = new ShellSettingsManager(ServiceProvider);
+            WritableSettingsStore userSettingsStore = settingsManager.GetWritableSettingsStore(SettingsScope.UserSettings);
+
+            int selectedRomId = userSettingsStore.GetInt32("Team Room Extension", "RoomId", 0);
+            string selectedTeamProjectUri = userSettingsStore.GetString("Team Room Extension", "TeamProjectUri","");
+        }
+
+        public void SaveUserSettings(int roomId, Uri teamProjectUri) {
+
+            SettingsManager settingsManager = new ShellSettingsManager(ServiceProvider);
+            WritableSettingsStore userSettingsStore = settingsManager.GetWritableSettingsStore(SettingsScope.UserSettings);
+
+            userSettingsStore.SetInt32("Team Room Extension", "RoomId", roomId);
+            userSettingsStore.SetString("Team Room Extension", "TeamProjectUri",  teamProjectUri.ToString());
+
         }
     }
 }

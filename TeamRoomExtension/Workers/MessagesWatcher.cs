@@ -63,7 +63,7 @@ namespace TeamRoomExtension.ServiceHelpers
             {
                 ProjectionCollectionUri = projectionCollectionUri;
                 RoomId = roomId;
-
+                waitTimeout = 0;
                 if (worker != null && worker.IsBusy)
                     return false;
                 

@@ -165,7 +165,7 @@ namespace TeamRoomExtension.ServiceHelpers
 
             return userImages;
         }
-
+        
         public static Dictionary<string, byte[]> GetUserProfileImages(List<IdentityRef> users)
         {
             var userImages = new Dictionary<string, byte[]>();

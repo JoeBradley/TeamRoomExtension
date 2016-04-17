@@ -41,7 +41,7 @@ namespace TeamRoomExtension
     using Microsoft.TeamFoundation.Framework.Client;
     using Microsoft.TeamFoundation.Framework.Common;
     using System.Windows.Media.Imaging;
-
+    
     /// <summary>
     /// Interaction logic for TeamRoomWindowControl.
     /// </summary>
@@ -141,8 +141,7 @@ namespace TeamRoomExtension
                 {
                     Collections.Add(pc);
                 }
-
-                //projectCollection = Collections.FirstOrDefault();
+                // TODO: Use User Settings to selectProject, then Team Room.
             }
             catch (Exception ex)
             {
@@ -342,6 +341,11 @@ namespace TeamRoomExtension
                 {
                     foreach (var item in users)
                     {
+                        if (!UserWorker.Instance.ProfileImages.ContainsKey(item.UserRef.Id))
+                        {
+                            var profileImages = TfsServiceWrapper.GetUserProfileImages(new List<IdentityRef> { item.UserRef});
+                            UserWorker.Instance.GetProfiles(profileImages);
+                        }
                         RoomUsers.Add(item);
                     }
                 }
@@ -364,7 +368,7 @@ namespace TeamRoomExtension
                 RefreshUserProfilePictures();
             }
         }
-
+        
         #endregion
 
         private void RefreshUserProfilePictures()

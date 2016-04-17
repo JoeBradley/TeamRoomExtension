@@ -55,6 +55,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Converters\BitmapImageConverter.cs" />
+    <Compile Include="Converters\ToLocalTimeConverter.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="ServiceHelpers\BoundTask.cs" />
     <Compile Include="Converters\ImageUriConverter.cs" />

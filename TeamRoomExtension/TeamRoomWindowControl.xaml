@@ -12,6 +12,7 @@
     <UserControl.Resources>
         <ServiceHelpers:ImageUriConverter x:Key="ImageUriConverter"/>
         <ServiceHelpers:ProfileColorConverter x:Key="ProfileColorConverter"/>
+        <ServiceHelpers:ToLocalTimeConverter x:Key="ToLocalTimeConverter"/>
     </UserControl.Resources>
     <DockPanel LastChildFill="True">
         <StackPanel DockPanel.Dock="Top" VerticalAlignment="Top">
@@ -45,24 +46,25 @@
 
             <DockPanel>
 
-                <ScrollViewer x:Name="svRoomUsers" Margin="5,0,5,10" ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Disabled" Height="38">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Top">
-                        <ItemsControl x:Name="lstRoomUsers" ScrollViewer.HorizontalScrollBarVisibility="Disabled" DataContext="{Binding ElementName=TeamRoomWindow}" ItemsSource="{Binding RoomUsers}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Grid HorizontalAlignment="Left" Margin="0,0,5,5">
-                                        <Ellipse Width="28" Height="28" VerticalAlignment="Top" StrokeThickness="1" Stroke="{Binding UserRef.Id, Converter={StaticResource ProfileColorConverter}, Mode=OneWay}" />
-                                        <Ellipse Width="24" Height="24" Margin="0,2,0,0" VerticalAlignment="Top" ToolTip="{Binding UserRef.DisplayName}" >
-                                            <Ellipse.Fill>
-                                                <ImageBrush ImageSource="{Binding UserRef.Id, Converter={StaticResource ImageUriConverter}, Mode=OneWay}" Stretch="UniformToFill"/>
-                                            </Ellipse.Fill>
-                                        </Ellipse>
-                                    </Grid>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </ScrollViewer>
+                <ItemsControl x:Name="lstRoomUsers" ScrollViewer.HorizontalScrollBarVisibility="Auto" DataContext="{Binding ElementName=TeamRoomWindow}" ItemsSource="{Binding RoomUsers}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                                <Grid x:Name="gRoomUsers" HorizontalAlignment="Left" Margin="0,0,5,5" Width="28" Height="28">
+                                    <Ellipse Width="28" Height="28" VerticalAlignment="Top" StrokeThickness="1" Stroke="{Binding UserRef.Id, Converter={StaticResource ProfileColorConverter}, Mode=OneWay}" />
+                                    <Ellipse Width="24" Height="24" Margin="0,2,0,0" VerticalAlignment="Top" ToolTip="{Binding UserRef.DisplayName}" >
+                                        <Ellipse.Fill>
+                                            <ImageBrush ImageSource="{Binding UserRef.Id, Converter={StaticResource ImageUriConverter}, Mode=OneWay}" Stretch="UniformToFill"/>
+                                        </Ellipse.Fill>
+                                    </Ellipse>
+                                </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </DockPanel>
 
         </StackPanel>
@@ -103,7 +105,7 @@
                                     <Border BorderThickness="0" CornerRadius="8" Background="{Binding PostedBy.Id, Converter={StaticResource ProfileColorConverter}, Mode=OneWay}" Padding="10,5">
                                         <TextBlock Text="{Binding Content}" FontFamily="Arial" FontSize="14" Foreground="#FFFFFFFF" Margin="0" HorizontalAlignment="Left" IsHyphenationEnabled="True" TextWrapping="WrapWithOverflow" VerticalAlignment="Top"/>
                                     </Border>
-                                    <TextBlock Text="{Binding PostedTime}" FontFamily="Arial" FontSize="10" FontStyle="Italic" Foreground="#FF7C7A7A" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,5,10,0" KeyUp="txtMessage_KeyUp" />
+                                    <TextBlock Text="{Binding PostedTime, Converter={StaticResource ToLocalTimeConverter}, Mode=OneWay}" FontFamily="Arial" FontSize="10" FontStyle="Italic" Foreground="#FF7C7A7A" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,5,10,0" KeyUp="txtMessage_KeyUp" />
                                 </StackPanel>
 
                             </DockPanel>
