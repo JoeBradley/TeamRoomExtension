@@ -107,23 +107,42 @@ namespace TeamRoomExtension
         }
 
         // https://msdn.microsoft.com/en-us/library/dn949254.aspx
-        public void LoadUserSettings()
+        public ExtensionSettings LoadUserSettings()
         {
-            SettingsManager settingsManager = new ShellSettingsManager(ServiceProvider);
-            WritableSettingsStore userSettingsStore = settingsManager.GetWritableSettingsStore(SettingsScope.UserSettings);
+            try
+            {
+                SettingsManager settingsManager = new ShellSettingsManager(ServiceProvider);
+                WritableSettingsStore userSettingsStore = settingsManager.GetWritableSettingsStore(SettingsScope.UserSettings);
 
-            int selectedRomId = userSettingsStore.GetInt32("Team Room Extension", "RoomId", 0);
-            string selectedTeamProjectUri = userSettingsStore.GetString("Team Room Extension", "TeamProjectUri","");
+                Uri selectedTeamProjectUri;
+                int selectedRoomId = userSettingsStore.GetInt32("Team Room Extension", "RoomId", 0);
+                Uri.TryCreate(userSettingsStore.GetString("Team Room Extension", "TeamProjectUri", ""), UriKind.Absolute, out selectedTeamProjectUri);
+
+                return new ExtensionSettings { ProjectCollectionUri = selectedTeamProjectUri, TeamRoomId = selectedRoomId };
+            }
+            catch (Exception ex)
+            {
+                return new ExtensionSettings();
+            }
         }
 
-        public void SaveUserSettings(int roomId, Uri teamProjectUri) {
+        public void SaveUserSettings(ExtensionSettings settings)
+        {
+            try
+            {
+                SettingsManager settingsManager = new ShellSettingsManager(ServiceProvider);
+                WritableSettingsStore userSettingsStore = settingsManager.GetWritableSettingsStore(SettingsScope.UserSettings);
 
-            SettingsManager settingsManager = new ShellSettingsManager(ServiceProvider);
-            WritableSettingsStore userSettingsStore = settingsManager.GetWritableSettingsStore(SettingsScope.UserSettings);
+                if (!userSettingsStore.CollectionExists("Team Room Extension"))
+                    userSettingsStore.CreateCollection("Team Room Extension");
 
-            userSettingsStore.SetInt32("Team Room Extension", "RoomId", roomId);
-            userSettingsStore.SetString("Team Room Extension", "TeamProjectUri",  teamProjectUri.ToString());
+                userSettingsStore.SetInt32("Team Room Extension", "RoomId", settings.TeamRoomId);
+                userSettingsStore.SetString("Team Room Extension", "TeamProjectUri", settings.ProjectCollectionUri != null ? settings.ProjectCollectionUri.ToString() : "");
+            }
+            catch (Exception ex)
+            {
 
+            }
         }
     }
 }

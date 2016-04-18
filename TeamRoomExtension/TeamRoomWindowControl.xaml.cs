@@ -50,15 +50,16 @@ namespace TeamRoomExtension
         #region Private properties
         
         Room teamRoom;
+        int teamRoomId = 0;
         Uri teamRoomUri
         {
             get
             {
                 try
                 {
-                    if (projectCollection == null || teamRoom == null) return null;
+                    if (projectCollectionUri == null || teamRoom == null) return null;
 
-                    return new Uri(string.Format("{0}/_rooms?name={1}&_a=today", projectCollection.Uri, HttpUtility.UrlEncode(teamRoom.Name)));
+                    return new Uri(string.Format("{0}/_rooms?name={1}&_a=today", projectCollectionUri, HttpUtility.UrlEncode(teamRoom.Name)));
                 }
                 catch (Exception)
                 {
@@ -68,7 +69,7 @@ namespace TeamRoomExtension
             }
         }
 
-        RegisteredProjectCollection projectCollection;
+        Uri projectCollectionUri;
 
         ObservableCollection<RegisteredProjectCollection> collections = new ObservableCollection<RegisteredProjectCollection>();
         public ObservableCollection<RegisteredProjectCollection> Collections
@@ -141,7 +142,26 @@ namespace TeamRoomExtension
                 {
                     Collections.Add(pc);
                 }
-                // TODO: Use User Settings to selectProject, then Team Room.
+                var settings = TeamRoomWindowCommand.Instance.LoadUserSettings();
+
+                if (settings.ProjectCollectionUri != null &&
+                    Collections.Select(x => x.Uri).Contains(settings.ProjectCollectionUri))
+                { 
+                    projectCollectionUri = settings.ProjectCollectionUri;
+                    teamRoomId = settings.TeamRoomId;
+
+                    if (projectCollectionUri != null && Collections.Select(x => x.Uri).Contains(projectCollectionUri))
+                    {
+                        foreach (RegisteredProjectCollection item in cmbCollectionList.Items)
+                        {
+                            if (item.Uri == projectCollectionUri)
+                            {
+                                cmbCollectionList.SelectedIndex = cmbCollectionList.Items.IndexOf(item);
+                                break;
+                            }
+                        }
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -155,9 +175,9 @@ namespace TeamRoomExtension
             {
                 if (txtMessage.Text.Trim(' ') == "") return;
 
-                if (teamRoom != null && projectCollection != null)
+                if (teamRoom != null && projectCollectionUri != null)
                 {
-                    var msg = TfsServiceWrapper.PostMessage(projectCollection.Uri, teamRoom.Id, txtMessage.Text);
+                    var msg = TfsServiceWrapper.PostMessage(projectCollectionUri, teamRoom.Id, txtMessage.Text);
                     //var msg = new Message() { Content = txtMessage.Text, PostedTime= DateTime.UtcNow };
                     txtMessage.Text = "";
                     Messages.Add(msg);
@@ -174,10 +194,13 @@ namespace TeamRoomExtension
         {
             try
             {
+                RoomUsers.Clear();
+                teamRoom = null;
                 Rooms.Clear();
-                if (projectCollection != null)
+                cmbRoomList.Text = "Loading Team Rooms...";
+                if (projectCollectionUri != null)
                 {
-                    RoomWorker.Instance.LoadRooms(projectCollection.Uri);
+                    RoomWorker.Instance.LoadRooms(projectCollectionUri);
                 }
             }
             catch { }
@@ -196,10 +219,10 @@ namespace TeamRoomExtension
         {
             try
             {
-                projectCollection = cmbCollectionList.SelectedValue as RegisteredProjectCollection;
-                Rooms.Clear();
-                cmbRoomList.Text = "Loading rooms please wait";
+                var projectCollection = cmbCollectionList.SelectedValue as RegisteredProjectCollection;
+                if (projectCollection != null) projectCollectionUri = projectCollection.Uri; 
                 LoadRooms();
+                TeamRoomWindowCommand.Instance.SaveUserSettings(new ExtensionSettings { TeamRoomId = teamRoom != null ? teamRoom.Id : 0, ProjectCollectionUri = projectCollection.Uri });
             }
             catch (Exception)
             {
@@ -214,14 +237,18 @@ namespace TeamRoomExtension
             try
             {
                 messages.Clear();
-                if (string.IsNullOrEmpty(cmbRoomList.SelectedValue.ToString()) || projectCollection == null)
+                if (cmbRoomList.SelectedValue == null || projectCollectionUri == null)
                     return;
 
                 teamRoom = cmbRoomList.SelectedValue as Room;
                 if (teamRoom != null)
                 {
-                    MessagesWatcher.Instance.DoWork(projectCollection.Uri, teamRoom.Id);
-                    RoomWorker.Instance.LoadRoomUsers(projectCollection.Uri, teamRoom.Id);
+                    MessagesWatcher.Instance.DoWork(projectCollectionUri, teamRoom.Id);
+                    RoomWorker.Instance.LoadRoomUsers(projectCollectionUri, teamRoom.Id);
+
+                    var settings = new ExtensionSettings { ProjectCollectionUri = projectCollectionUri, TeamRoomId = teamRoom.Id };
+
+                    TeamRoomWindowCommand.Instance.SaveUserSettings(settings);
                 }
             }
             catch (Exception ex)
@@ -316,6 +343,16 @@ namespace TeamRoomExtension
                     foreach (var item in rooms)
                     {
                         Rooms.Add(item);
+                    }
+                    if (teamRoomId != 0 && Rooms.Select(x => x.Id).Contains(teamRoomId)) {
+                        foreach (Room item in cmbRoomList.Items)
+                        {
+                            if (item.Id == teamRoomId)
+                            {
+                                cmbRoomList.SelectedIndex = cmbRoomList.Items.IndexOf(item);
+                                break;
+                            }
+                        }
                     }
                 }
             } 
