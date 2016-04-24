@@ -9,7 +9,7 @@ namespace TeamRoomExtension.ServiceHelpers
     using Microsoft.TeamFoundation.Framework.Client;
     using Microsoft.TeamFoundation.Framework.Common;
     using Microsoft.VisualStudio.Services.WebApi;
-
+    using System.Collections.Generic;
     public sealed class RoomWorker
     {
         // Singleton Instance
@@ -17,17 +17,20 @@ namespace TeamRoomExtension.ServiceHelpers
 
         // Lock objects
         private static readonly object SingletonLock = new Object();
-        private static readonly object CritSectionLock = new Object();
-
+        private static readonly object PollRoomUsersLock = new Object();
+        private static readonly object LoadRoomsLock = new Object();
+        
         // Background worker
         public BackgroundWorker LoadRoomsWorker;
-        public BackgroundWorker LoadRoomUsersWorker;
-        public Uri connectionUri;
+        public BackgroundWorker PollRoomUsersWorker;
+
+        public int RoomId;
+        public Uri ProjectionCollectionUri;
 
         private RoomWorker()
         {
             LoadRoomsWorker = CreateWorker(LoadRoomsWorker_DoWork);
-            LoadRoomUsersWorker = CreateWorker(LoadRoomUsersWorker_DoWork);
+            //PollRoomUsersWorker = CreateWorker(PollRoomUsersWorker_DoWork);
         }
 
         public static RoomWorker Instance
@@ -47,15 +50,17 @@ namespace TeamRoomExtension.ServiceHelpers
             }
         }
 
-        public bool LoadRooms(Uri connectionUri)
+        public bool LoadRooms(Uri projectionCollectionUri)
         {
             try
             {
+                ProjectionCollectionUri = projectionCollectionUri;
+
                 if (LoadRoomsWorker != null && LoadRoomsWorker.IsBusy) return false;
 
-                if (LoadRoomsWorker == null) CreateWorker(LoadRoomsWorker_DoWork);
+                if (LoadRoomsWorker == null) LoadRoomsWorker = CreateWorker(LoadRoomsWorker_DoWork);
 
-                LoadRoomsWorker.RunWorkerAsync(connectionUri);
+                LoadRoomsWorker.RunWorkerAsync(projectionCollectionUri);
 
                 return true;
             }
@@ -66,15 +71,18 @@ namespace TeamRoomExtension.ServiceHelpers
             return false;
         }
 
-        public bool LoadRoomUsers(Uri connection, int roomId)
+        public bool PollRoomUsers(Uri projectionCollectionUri, int roomId, ProgressChangedEventHandler progressHandler, RunWorkerCompletedEventHandler completedHandler)
         {
             try
             {
-                if (LoadRoomUsersWorker != null && LoadRoomUsersWorker.IsBusy) return false;
+                ProjectionCollectionUri = projectionCollectionUri; 
+                RoomId = roomId;
 
-                if (LoadRoomUsersWorker == null) CreateWorker(LoadRoomUsersWorker_DoWork);
+                if (PollRoomUsersWorker != null && PollRoomUsersWorker.IsBusy) return false;
 
-                LoadRoomUsersWorker.RunWorkerAsync(new { Uri = connection, RoomId = roomId } );
+                if (PollRoomUsersWorker == null) PollRoomUsersWorker = CreateWorker(PollRoomUsersWorker_DoWork, progressHandler, completedHandler);
+
+                PollRoomUsersWorker.RunWorkerAsync();
 
                 return true;
             }
@@ -85,43 +93,40 @@ namespace TeamRoomExtension.ServiceHelpers
             return false;
         }
 
-        private BackgroundWorker CreateWorker(DoWorkEventHandler doWork)
+        private BackgroundWorker CreateWorker(DoWorkEventHandler doWorkEventHandler, ProgressChangedEventHandler reportProgressEventHandler = null, RunWorkerCompletedEventHandler completedEventHandler = null)
         {
             var bw = new BackgroundWorker();
 
-            bw.WorkerReportsProgress = false;
-            bw.WorkerSupportsCancellation = false;
+            bw.WorkerReportsProgress = reportProgressEventHandler != null;
+            bw.WorkerSupportsCancellation = true;
 
-            bw.DoWork += new DoWorkEventHandler(doWork);
+            bw.DoWork += new DoWorkEventHandler(doWorkEventHandler);
+            if (reportProgressEventHandler != null) bw.ProgressChanged += new ProgressChangedEventHandler(reportProgressEventHandler);
+            if (completedEventHandler != null) bw.RunWorkerCompleted += new RunWorkerCompletedEventHandler(completedEventHandler);
 
             return bw;
         }
 
         #region Events
 
-        /// <summary>
-        /// Background Worker entry point.  Critical Code Sections are wrapped in an Application, and then Database Level lock.  
-        /// The Application lock ensures that the the critical section is atomic within the current application scope.  
-        /// The Database Level lock ensures that the critical section is atomic across mutiple runnning applications (possibly on seperate servers).
-        /// </summary>
-        /// <param name="sender">Background Worker</param>
-        /// <param name="e">Worker State information</param>
+        // Load Project Collection Team Rooms
         private void LoadRoomsWorker_DoWork(object sender, DoWorkEventArgs e)
         {
             var worker = sender as BackgroundWorker;
             var args = e.Argument as Uri;
-
+            var hasLock = false;
             try
             {
                 // Get Lock
-                if (Monitor.TryEnter(CritSectionLock, 2 * 1000))
+                hasLock = Monitor.TryEnter(LoadRoomsLock, 2 * 1000);
+                if (hasLock)
                 {
                     var rooms = TfsServiceWrapper.GetRoomsAsync(args).Result;
                     e.Result = rooms;
                 }
             }
             catch (Exception ex)
-            {
+            {                
                 Console.WriteLine("Background Worker Error: {0}", ex.Message);
             }
             finally
@@ -129,7 +134,7 @@ namespace TeamRoomExtension.ServiceHelpers
                 try
                 {
                     // Release CritSection Lock
-                    Monitor.Exit(CritSectionLock);
+                   if (hasLock) Monitor.Exit(LoadRoomsLock);
                 }
                 catch (Exception ex)
                 {
@@ -138,18 +143,27 @@ namespace TeamRoomExtension.ServiceHelpers
             }
         }
 
-        private void LoadRoomUsersWorker_DoWork(object sender, DoWorkEventArgs e)
+        // Get the Team Room Users.  Poll for changes.
+        private void PollRoomUsersWorker_DoWork(object sender, DoWorkEventArgs e)
         {
             var worker = sender as BackgroundWorker;
-            dynamic args = e.Argument as dynamic;
+            var hasLock = false;
 
             try
             {
                 // Get Lock
-                if (Monitor.TryEnter(CritSectionLock, 2 * 1000))
-                {
-                    var users = TfsServiceWrapper.GetRoomUsersAsync(args.Uri, args.RoomId).Result;
-                    e.Result = users;
+                hasLock = Monitor.TryEnter(PollRoomUsersLock, 2 * 1000);
+                if (hasLock)
+                {                    
+                    while (!worker.CancellationPending && ProjectionCollectionUri != null && RoomId > 0)
+                    {
+                        List<User> users = TfsServiceWrapper.GetRoomUsersAsync(ProjectionCollectionUri, RoomId).Result;
+                        worker.ReportProgress(1, users);
+                        if (!worker.CancellationPending && RoomId > 0 && ProjectionCollectionUri != null)
+                        {
+                            Thread.Sleep(20 * 1000);
+                        }
+                    }
                 }
             }
             catch (Exception ex)
@@ -161,7 +175,7 @@ namespace TeamRoomExtension.ServiceHelpers
                 try
                 {
                     // Release CritSection Lock
-                    Monitor.Exit(CritSectionLock);
+                    if(hasLock)Monitor.Exit(PollRoomUsersLock);
                 }
                 catch (Exception ex)
                 {

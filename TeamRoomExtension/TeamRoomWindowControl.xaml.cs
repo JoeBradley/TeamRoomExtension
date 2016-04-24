@@ -41,16 +41,21 @@ namespace TeamRoomExtension
     using Microsoft.TeamFoundation.Framework.Client;
     using Microsoft.TeamFoundation.Framework.Common;
     using System.Windows.Media.Imaging;
-    
+    using Microsoft.VisualStudio.Shell.Interop;
     /// <summary>
     /// Interaction logic for TeamRoomWindowControl.
     /// </summary>
     public partial class TeamRoomWindowControl : UserControl, INotifyPropertyChanged
-    {        
+    {
         #region Private properties
-        
-        Room teamRoom;
+
+        // Team Room Id loaded from saved User profile.  Should be used on first load to automatically select the last viewed team room.
         int teamRoomId = 0;
+
+        // Currently Selected Team Room
+        Room teamRoom;
+
+        // Get the URl for the currently selected Team Room
         Uri teamRoomUri
         {
             get
@@ -69,8 +74,13 @@ namespace TeamRoomExtension
             }
         }
 
+        // Currently selected Project Collection Uri
         Uri projectCollectionUri;
 
+        // Does the window have focus?
+        bool StatusSet = false;
+
+        // User Project Collections
         ObservableCollection<RegisteredProjectCollection> collections = new ObservableCollection<RegisteredProjectCollection>();
         public ObservableCollection<RegisteredProjectCollection> Collections
         {
@@ -78,6 +88,7 @@ namespace TeamRoomExtension
             set { collections = value; OnPropertyChanged("Collections"); }
         }
 
+        // Current Project Team Rooms.  This is cleared and re-loaded whenever a different Team Project is selected.
         ObservableCollection<Room> rooms = new ObservableCollection<Room>();
         public ObservableCollection<Room> Rooms
         {
@@ -85,6 +96,7 @@ namespace TeamRoomExtension
             set { rooms = value; OnPropertyChanged("Rooms"); }
         }
 
+        // Current Team Rooms Users.  This is cleared and re-loaded whenever a different Team Room is selected.
         ObservableCollection<User> roomUsers = new ObservableCollection<User>();
         public ObservableCollection<User> RoomUsers
         {
@@ -92,16 +104,19 @@ namespace TeamRoomExtension
             set { roomUsers = value; OnPropertyChanged("RoomUsers"); }
         }
 
+        // Current Team Room messages.  This is cleaered and re-loaded whenever a different Team Room is selected.
         ObservableCollection<Message> messages = new ObservableCollection<Message>();
         public ObservableCollection<Message> Messages
         {
             get { return messages; }
-            set {
+            set
+            {
                 messages = value;
                 OnPropertyChanged("Messages");
             }
         }
 
+        // Property CHanged event handler.  Needed for ObservableCollections (??? - still not sure how they work)
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged(string name)
         {
@@ -111,7 +126,7 @@ namespace TeamRoomExtension
                 handler(this, new PropertyChangedEventArgs(name));
             }
         }
-        
+
         #endregion
 
         /// <summary>
@@ -119,15 +134,14 @@ namespace TeamRoomExtension
         /// </summary>
         public TeamRoomWindowControl()
         {
-            this.InitializeComponent(); 
+            this.InitializeComponent();
 
-            // Set the bubble up delegate
+            // Add event delegates to background workers
             MessagesWatcher.Instance.ReportProgress += MessagesWatcher_NewMessages;
             MessagesWatcher.Instance.ReportComplete += MessagesWatcher_Complete;
 
             // Set the event handler directly on the background worker
             RoomWorker.Instance.LoadRoomsWorker.RunWorkerCompleted += Rooms_Loaded;
-            RoomWorker.Instance.LoadRoomUsersWorker.RunWorkerCompleted += RoomUsers_Loaded;
             
             UserWorker.Instance.Worker.RunWorkerCompleted += ProfilePictures_Loaded;
 
@@ -146,7 +160,7 @@ namespace TeamRoomExtension
 
                 if (settings.ProjectCollectionUri != null &&
                     Collections.Select(x => x.Uri).Contains(settings.ProjectCollectionUri))
-                { 
+                {
                     projectCollectionUri = settings.ProjectCollectionUri;
                     teamRoomId = settings.TeamRoomId;
 
@@ -188,12 +202,14 @@ namespace TeamRoomExtension
             {
             }
         }
-        
+
         // Call the Worker thread to load the list of rooms for the connected project service uri
         private void LoadRooms()
         {
             try
             {
+                TeamRoomWindowCommand.Instance.LogMessage("Loading Rooms");
+
                 RoomUsers.Clear();
                 teamRoom = null;
                 Rooms.Clear();
@@ -205,9 +221,9 @@ namespace TeamRoomExtension
             }
             catch { }
         }
-        
+
         #region Events
-        
+
         // Cancel Background worker threads    
         private void TeamRoomWindow_Unload(object sender, RoutedEventArgs e)
         {
@@ -218,9 +234,14 @@ namespace TeamRoomExtension
         private void cmbCollectionList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             try
-            {
+            {           
+                Messages.Clear();
+                RefreshMessages();
+                RoomUsers.Clear();
+                RefreshRoomUsers();
+                
                 var projectCollection = cmbCollectionList.SelectedValue as RegisteredProjectCollection;
-                if (projectCollection != null) projectCollectionUri = projectCollection.Uri; 
+                if (projectCollection != null) projectCollectionUri = projectCollection.Uri;
                 LoadRooms();
                 TeamRoomWindowCommand.Instance.SaveUserSettings(new ExtensionSettings { TeamRoomId = teamRoom != null ? teamRoom.Id : 0, ProjectCollectionUri = projectCollection.Uri });
             }
@@ -237,6 +258,8 @@ namespace TeamRoomExtension
             try
             {
                 messages.Clear();
+                RefreshMessages();
+
                 if (cmbRoomList.SelectedValue == null || projectCollectionUri == null)
                     return;
 
@@ -244,7 +267,7 @@ namespace TeamRoomExtension
                 if (teamRoom != null)
                 {
                     MessagesWatcher.Instance.DoWork(projectCollectionUri, teamRoom.Id);
-                    RoomWorker.Instance.LoadRoomUsers(projectCollectionUri, teamRoom.Id);
+                    RoomWorker.Instance.PollRoomUsers(projectCollectionUri, teamRoom.Id, PollRoomUsers_NewUsers, PollRoomUsers_Complete);
 
                     var settings = new ExtensionSettings { ProjectCollectionUri = projectCollectionUri, TeamRoomId = teamRoom.Id };
 
@@ -254,15 +277,16 @@ namespace TeamRoomExtension
             catch (Exception ex)
             {
                 // Log errors
+                TeamRoomWindowCommand.Instance.LogError(ex);
             }
         }
-        
+
         // Post the message text
         private void btnPostMessage_Click(object sender, RoutedEventArgs e)
         {
             PostMessage();
         }
-        
+
         // Post the message text
         private void txtMessage_KeyUp(object sender, System.Windows.Input.KeyEventArgs e)
         {
@@ -284,44 +308,36 @@ namespace TeamRoomExtension
         #endregion
 
         #region External Events
-        
+
         private void MessagesWatcher_NewMessages(object sender, MessagesProgress e)
         {
             if (e.Messages == null || !e.Messages.Any())
                 return;
 
+            int messagesAdded = 0;
+
             foreach (var item in e.Messages)
             {
                 if (!Messages.Select(x => x.Id).Contains(item.Id))
+                {
                     Messages.Add(item);
+                    messagesAdded++;
+                }
             }
 
-            svMessages.ScrollToEnd();            
+            svMessages.ScrollToEnd();
+            if (messagesAdded > 0)
+            {
+                SetStatusMessage(messagesAdded);
+            }
         }
 
         private void MessagesWatcher_Complete(object sender, MessageWorkerCompleteResult e)
         {
-            // TODO: add logic to re-start watcher thread if ;
-            // work complete           
-            //if (e.Cancelled == true)
-            //{
-            //    Console.WriteLine("Worker canceled");
-            //}
-            //else if (e.Error != null)
-            //{
-            //    Console.WriteLine("Worker error", e.Error.Message);
-            //}
-            //else
-            //{
-            //    var rooms = e.Result as IEnumerable<Room>;
-            //    Rooms.Clear();
-            //    foreach (var item in rooms)
-            //    {
-            //        Rooms.Add(item);
-            //    }
-            //}
+            if (projectCollectionUri != null && teamRoom != null)
+                MessagesWatcher.Instance.DoWork(projectCollectionUri, teamRoom.Id);
         }
-        
+
         private void Rooms_Loaded(object sender, RunWorkerCompletedEventArgs e)
         {
             // work complete           
@@ -335,58 +351,29 @@ namespace TeamRoomExtension
             }
             else
             {
-                var rooms = e.Result as IEnumerable<Room>;
-                Rooms.Clear();
-
-                if (rooms != null)
+                if (e.Result is IEnumerable<Room>)
                 {
-                    foreach (var item in rooms)
-                    {
-                        Rooms.Add(item);
-                    }
-                    if (teamRoomId != 0 && Rooms.Select(x => x.Id).Contains(teamRoomId)) {
-                        foreach (Room item in cmbRoomList.Items)
-                        {
-                            if (item.Id == teamRoomId)
-                            {
-                                cmbRoomList.SelectedIndex = cmbRoomList.Items.IndexOf(item);
-                                break;
-                            }
-                        }
-                    }
+                    LoadRooms(e.Result as IEnumerable<Room>);
                 }
-            } 
+                else
+                {
+                    //Log error
+                }
+            }
         }
 
-        private void RoomUsers_Loaded(object sender, RunWorkerCompletedEventArgs e)
+        private void PollRoomUsers_NewUsers(object sender, ProgressChangedEventArgs e)
         {
-            // work complete           
-            if (e.Cancelled == true)
-            {
-                Console.WriteLine("Worker canceled");
-            }
-            else if (e.Error != null)
-            {
-                Console.WriteLine("Worker error", e.Error.Message);
-            }
-            else
-            {
-                var users = e.Result as IEnumerable<User>;
-                RoomUsers.Clear();
+            if (!(e.UserState is List<User>)) return;
 
-                if (users != null)
-                {
-                    foreach (var item in users)
-                    {
-                        if (!UserWorker.Instance.ProfileImages.ContainsKey(item.UserRef.Id))
-                        {
-                            var profileImages = TfsServiceWrapper.GetUserProfileImages(new List<IdentityRef> { item.UserRef});
-                            UserWorker.Instance.GetProfiles(profileImages);
-                        }
-                        RoomUsers.Add(item);
-                    }
-                }
-            }
+            List<User> users = e.UserState as List<User>;
+            LoadRoomUsers(users);
+        }
+
+        private void PollRoomUsers_Complete(object sender, RunWorkerCompletedEventArgs e)
+        {
+            if (projectCollectionUri != null && teamRoom != null)
+                RoomWorker.Instance.PollRoomUsers(projectCollectionUri, teamRoom.Id, PollRoomUsers_NewUsers, PollRoomUsers_Complete);
         }
 
         private void ProfilePictures_Loaded(object sender, RunWorkerCompletedEventArgs e)
@@ -402,16 +389,80 @@ namespace TeamRoomExtension
             }
             else
             {
-                RefreshUserProfilePictures();
+                RefreshMessages();
             }
         }
-        
+
         #endregion
 
-        private void RefreshUserProfilePictures()
+        private void LoadRooms(IEnumerable<Room> rooms)
+        {
+            Rooms.Clear();
+
+            if (rooms != null)
+            {
+                foreach (var item in rooms)
+                {
+                    Rooms.Add(item);
+                }
+                if (teamRoomId != 0 && Rooms.Select(x => x.Id).Contains(teamRoomId))
+                {
+                    foreach (Room item in cmbRoomList.Items)
+                    {
+                        if (item.Id == teamRoomId)
+                        {
+                            cmbRoomList.SelectedIndex = cmbRoomList.Items.IndexOf(item);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        private void LoadRoomUsers(IEnumerable<User> users)
+        {
+            RoomUsers.Clear();
+
+            if (users != null)
+            {
+                foreach (var item in users)
+                {
+                    if (!UserWorker.Instance.ProfileImages.ContainsKey(item.UserRef.Id))
+                    {
+                        var profileImages = TfsServiceWrapper.GetUserProfileImages(new List<IdentityRef> { item.UserRef });
+                        UserWorker.Instance.GetProfiles(profileImages);
+                    }
+                    RoomUsers.Add(item);
+                }
+            }
+        }
+
+        private void SetStatusMessage(int messages)
+        {
+            if (!this.HasEffectiveKeyboardFocus && teamRoom != null)
+            {
+                TeamRoomWindowCommand.Instance.SetStatusMessage(string.Format("{0} new message{1} from {2} team room", messages, messages == 1? "":"s", teamRoom.Name));
+                StatusSet = true;
+            }
+        }
+
+        private void RefreshMessages()
         {
             // HACK: Force refresh by updating a property on each object.
             lstMessages.ItemsSource = Messages;
-        }       
-    }    
+        }
+
+        private void RefreshRoomUsers()
+        {
+            // HACK: Force refresh by updating a property on each object.
+            lstRoomUsers.ItemsSource = RoomUsers;
+        }
+
+        private void ClearStatusMessage(object sender, RoutedEventArgs e)
+        {
+            if (!StatusSet) return;
+            StatusSet = false;
+            TeamRoomWindowCommand.Instance.ClearStatusMessage();
+        }
+    }
 }

@@ -11,6 +11,7 @@ using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using Microsoft.VisualStudio.Settings;
 using Microsoft.VisualStudio.Shell.Settings;
+using System.Drawing;
 
 namespace TeamRoomExtension
 {
@@ -143,6 +144,89 @@ namespace TeamRoomExtension
             {
 
             }
+        }
+
+        private IVsStatusbar _statusBar = null;
+        private IVsStatusbar StatusBar
+        {
+            get
+            {
+                if (_statusBar == null)
+                {
+                    _statusBar = (IVsStatusbar)ServiceProvider.GetService(typeof(SVsStatusbar));
+                }
+
+                return _statusBar;
+            }
+        }
+        private object _animationObject;
+        private void SetAnimationObject()
+        {            
+            if (_animationObject == null)
+            {
+                Bitmap img = new Bitmap(@"Resources/icon.png");
+                IntPtr hdc = IntPtr.Zero;
+                hdc = img.GetHbitmap();
+                _animationObject = (object)hdc;                
+            }            
+        }
+
+        public void SetStatusMessage(String message)
+        {
+            // Make sure the status bar is not frozen
+            int frozen;
+
+            StatusBar.IsFrozen(out frozen);
+
+            if (frozen != 0)
+            {
+                StatusBar.FreezeOutput(0);
+            }
+
+            // Set the status bar text and make its display static.
+            StatusBar.SetText(message);
+
+            //SetAnimationObject();
+            //StatusBar.Animation(1, ref _animationObject);          
+        }
+
+        public void ClearStatusMessage()
+        {
+            // Make sure the status bar is not frozen
+            int frozen;
+
+            StatusBar.IsFrozen(out frozen);
+
+            if (frozen != 0)
+            {
+                StatusBar.FreezeOutput(0);
+            }
+
+            StatusBar.SetText("");
+            StatusBar.Animation(0, _animationObject);
+            //StatusBar.Clear();
+        }
+
+        private IVsActivityLog _log;
+        private IVsActivityLog Log {
+            get {
+                //if (_log == null)
+                    _log = (IVsActivityLog)ServiceProvider.GetService(typeof(SVsActivityLog));
+                return _log;
+            }
+        }
+
+        public void LogMessage(string message)
+        {
+            int hr = Log.LogEntry((UInt32)__ACTIVITYLOG_ENTRYTYPE.ALE_INFORMATION,
+                this.ToString(), message);
+        }
+
+        public void LogError(Exception ex)
+        {
+            int hr = Log.LogEntry((UInt32)__ACTIVITYLOG_ENTRYTYPE.ALE_INFORMATION,
+                this.ToString(),
+                string.Format(CultureInfo.CurrentCulture, "Exception: {0}, Stack Trace: {1}", ex.Message, ex.StackTrace));
         }
     }
 }

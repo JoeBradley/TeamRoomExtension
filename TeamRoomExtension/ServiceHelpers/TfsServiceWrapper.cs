@@ -39,7 +39,10 @@ namespace TeamRoomExtension.ServiceHelpers
                 if (_connectionUri != null && value.AbsoluteUri == _connectionUri.AbsoluteUri)
                     return;
                 if (_tpc != null)
+                {
                     _tpc.Dispose();
+                    _tpc = null;
+                }
                 _connectionUri = value;
             }
         }

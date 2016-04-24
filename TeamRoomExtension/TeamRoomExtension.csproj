@@ -54,6 +54,7 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="ActivityLogs.cs" />
     <Compile Include="Converters\BitmapImageConverter.cs" />
     <Compile Include="Converters\ToLocalTimeConverter.cs" />
     <Compile Include="ExtensionSettings.cs" />
@@ -87,8 +88,13 @@
     </Resource>
     <Resource Include="Resources\Profile.JPG" />
     <Resource Include="Resources\CloudConnectedServices_32x.png" />
-    <Resource Include="Resources\comment.svg" />
     <Resource Include="Resources\comment.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Resource>
+    <Resource Include="Resources\icon.ico">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Resource>
+    <Resource Include="Resources\icon.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Resource>
     <Content Include="Resources\TeamRoomWindowCommand.png">

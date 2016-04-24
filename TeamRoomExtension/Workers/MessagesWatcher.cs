@@ -25,7 +25,7 @@ namespace TeamRoomExtension.ServiceHelpers
         public delegate void ReportCompleteEventHandler(object sender, MessageWorkerCompleteResult e);
         
         // Background worker
-        private BackgroundWorker worker;
+        private BackgroundWorker messageWorker;
         private int waitTimeout = 0;
         private const int sleepPeriod = 3000;
         private DateTime lastMessage = DateTime.UtcNow;
@@ -37,7 +37,7 @@ namespace TeamRoomExtension.ServiceHelpers
 
         private MessagesWatcher()
         {
-            worker = CreateWorker();
+            messageWorker = CreateWorker();
         }
 
         public static MessagesWatcher Instance
@@ -64,12 +64,13 @@ namespace TeamRoomExtension.ServiceHelpers
                 ProjectionCollectionUri = projectionCollectionUri;
                 RoomId = roomId;
                 waitTimeout = 0;
-                if (worker != null && worker.IsBusy)
-                    return false;
+                if (messageWorker != null && messageWorker.IsBusy) {
+                    return true;
+                }
                 
-                if (worker == null) worker = CreateWorker();
+                if (messageWorker == null) messageWorker = CreateWorker();
 
-                worker.RunWorkerAsync();
+                messageWorker.RunWorkerAsync();
                 return true;
             }
             catch (Exception ex)
@@ -77,7 +78,7 @@ namespace TeamRoomExtension.ServiceHelpers
                 //Debug.Fail(ex.Message);
             }
             return false;
-        }
+        }        
 
         public void PollNow()
         {
@@ -86,7 +87,10 @@ namespace TeamRoomExtension.ServiceHelpers
 
         public void Cancel()
         {
-            if (worker != null && worker.IsBusy) worker.CancelAsync();
+            RoomId = 0;
+            ProjectionCollectionUri = null;
+
+            if (messageWorker != null && messageWorker.IsBusy) messageWorker.CancelAsync();
         }
 
         private BackgroundWorker CreateWorker()
@@ -117,24 +121,22 @@ namespace TeamRoomExtension.ServiceHelpers
         {
             var worker = sender as BackgroundWorker;
             var args = e.Argument as MessageWorkerEventArgs;
-
-            var lockKey = Guid.NewGuid();
-
+            
             try
             {
                 // Get Lock
                 if (Monitor.TryEnter(CritSectionLock, 2 * 1000))
                 {
 
-                    while (!worker.CancellationPending)
+                    while (!worker.CancellationPending && RoomId > 0 && ProjectionCollectionUri != null)
                     {
                         var messages = TfsServiceWrapper.GetRoomMessagesAsync(ProjectionCollectionUri, RoomId).Result;
                         var profiles = TfsServiceWrapper.GetUserProfileImages(messages.Select(x => x.PostedBy).Distinct().ToList());
                         UserWorker.Instance.GetProfiles(profiles);
                         worker.ReportProgress(1, new MessagesProgress() { Messages = messages });
-                        if (!worker.CancellationPending)
+                        if (!worker.CancellationPending && RoomId > 0 && ProjectionCollectionUri != null)
                         {
-                            if (messages.Any()) lastMessage = messages.Max(x => x.PostedTime);
+                            if (messages != null && messages.Any()) lastMessage = messages.Max(x => x.PostedTime);
                             SetWaitTimeout();
                             int slept = 0;
                             while (slept < waitTimeout)
@@ -186,6 +188,7 @@ namespace TeamRoomExtension.ServiceHelpers
         {
             try {
                 // work complete           
+
                 if (e.Cancelled == true)
                 {
                     Console.WriteLine("Worker canceled");
