@@ -137,8 +137,8 @@ namespace TeamRoomExtension
             this.InitializeComponent();
 
             // Add event delegates to background workers
-            MessagesWatcher.Instance.ReportProgress += MessagesWatcher_NewMessages;
-            MessagesWatcher.Instance.ReportComplete += MessagesWatcher_Complete;
+            TfsMonitor.Instance.ReportProgress += MessagesWatcher_NewMessages;
+            TfsMonitor.Instance.ReportComplete += MessagesWatcher_Complete;
 
             // Set the event handler directly on the background worker
             RoomWorker.Instance.LoadRoomsWorker.RunWorkerCompleted += Rooms_Loaded;
@@ -195,7 +195,7 @@ namespace TeamRoomExtension
                     //var msg = new Message() { Content = txtMessage.Text, PostedTime= DateTime.UtcNow };
                     txtMessage.Text = "";
                     Messages.Add(msg);
-                    MessagesWatcher.Instance.PollNow();
+                    TfsMonitor.Instance.PollNow();
                 }
             }
             catch (Exception ex)
@@ -228,7 +228,7 @@ namespace TeamRoomExtension
         private void TeamRoomWindow_Unload(object sender, RoutedEventArgs e)
         {
             teamRoom = null;
-            MessagesWatcher.Instance.Cancel();
+            TfsMonitor.Instance.Cancel();
         }
 
         private void cmbCollectionList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -266,7 +266,7 @@ namespace TeamRoomExtension
                 teamRoom = cmbRoomList.SelectedValue as Room;
                 if (teamRoom != null)
                 {
-                    MessagesWatcher.Instance.DoWork(projectCollectionUri, teamRoom.Id);
+                    TfsMonitor.Instance.DoWork(projectCollectionUri, teamRoom.Id);
                     RoomWorker.Instance.PollRoomUsers(projectCollectionUri, teamRoom.Id, PollRoomUsers_NewUsers, PollRoomUsers_Complete);
 
                     var settings = new ExtensionSettings { ProjectCollectionUri = projectCollectionUri, TeamRoomId = teamRoom.Id };
@@ -311,8 +311,11 @@ namespace TeamRoomExtension
 
         private void MessagesWatcher_NewMessages(object sender, MessagesProgress e)
         {
-            if (e.Messages == null || !e.Messages.Any())
+            if (e.Messages == null || !e.Messages.Any() ||
+                e.RoomId != teamRoom.Id || e.ConnectionUri != projectCollectionUri)
+            {
                 return;
+            }
 
             int messagesAdded = 0;
 
@@ -335,10 +338,10 @@ namespace TeamRoomExtension
         private void MessagesWatcher_Complete(object sender, MessageWorkerCompleteResult e)
         {
             if (projectCollectionUri != null && teamRoom != null)
-                MessagesWatcher.Instance.DoWork(projectCollectionUri, teamRoom.Id);
+                TfsMonitor.Instance.DoWork(projectCollectionUri, teamRoom.Id);
         }
 
-        private void Rooms_Loaded(object sender, RunWorkerCompletedEventArgs e)
+        private void Rooms_Loaded(object sender, RoomWorkerCompleteResult e)
         {
             // work complete           
             if (e.Cancelled == true)
@@ -362,7 +365,7 @@ namespace TeamRoomExtension
             }
         }
 
-        private void PollRoomUsers_NewUsers(object sender, ProgressChangedEventArgs e)
+        private void PollRoomUsers_NewUsers(object sender, RoomUserWorkerReportProgress e)
         {
             if (!(e.UserState is List<User>)) return;
 

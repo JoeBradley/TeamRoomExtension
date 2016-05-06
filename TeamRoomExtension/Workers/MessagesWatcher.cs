@@ -8,10 +8,10 @@ using Microsoft.VisualStudio.Services.WebApi;
 
 namespace TeamRoomExtension.ServiceHelpers
 {
-    public sealed class MessagesWatcher
+    public sealed class TfsMonitor
     {
         // Singleton Instance
-        private static volatile MessagesWatcher instance;
+        private static volatile TfsMonitor instance;
 
         // Lock objects
         private static readonly object SingletonLock = new Object();
@@ -20,10 +20,10 @@ namespace TeamRoomExtension.ServiceHelpers
         // Worker Event Delegate and Handler
         public event ReportProgressEventHandler ReportProgress = delegate { };
         public delegate void ReportProgressEventHandler(object sender, MessagesProgress e);
-        
-        public event  ReportCompleteEventHandler ReportComplete = delegate { };
+
+        public event ReportCompleteEventHandler ReportComplete = delegate { };
         public delegate void ReportCompleteEventHandler(object sender, MessageWorkerCompleteResult e);
-        
+
         // Background worker
         private BackgroundWorker messageWorker;
         private int waitTimeout = 0;
@@ -35,12 +35,12 @@ namespace TeamRoomExtension.ServiceHelpers
         private int RoomId;
 
 
-        private MessagesWatcher()
+        private TfsMonitor()
         {
             messageWorker = CreateWorker();
         }
 
-        public static MessagesWatcher Instance
+        public static TfsMonitor Instance
         {
             get
             {
@@ -49,7 +49,7 @@ namespace TeamRoomExtension.ServiceHelpers
                     lock (SingletonLock)
                     {
                         if (instance == null)
-                            instance = new MessagesWatcher();
+                            instance = new TfsMonitor();
                     }
                 }
 
@@ -64,10 +64,11 @@ namespace TeamRoomExtension.ServiceHelpers
                 ProjectionCollectionUri = projectionCollectionUri;
                 RoomId = roomId;
                 waitTimeout = 0;
-                if (messageWorker != null && messageWorker.IsBusy) {
+                if (messageWorker != null && messageWorker.IsBusy)
+                {
                     return true;
                 }
-                
+
                 if (messageWorker == null) messageWorker = CreateWorker();
 
                 messageWorker.RunWorkerAsync();
@@ -78,7 +79,7 @@ namespace TeamRoomExtension.ServiceHelpers
                 //Debug.Fail(ex.Message);
             }
             return false;
-        }        
+        }
 
         public void PollNow()
         {
@@ -101,7 +102,7 @@ namespace TeamRoomExtension.ServiceHelpers
             bw.WorkerReportsProgress = true;
 
             bw.DoWork += new DoWorkEventHandler(BackgroundWorker_DoWork);
-            bw.ProgressChanged += new ProgressChangedEventHandler(BackgroundWorker_ProgressChanged);            
+            bw.ProgressChanged += new ProgressChangedEventHandler(BackgroundWorker_ProgressChanged);
             bw.RunWorkerCompleted += new RunWorkerCompletedEventHandler(BackgroundWorker_RunWorkerCompleted);
 
             return bw;
@@ -121,7 +122,7 @@ namespace TeamRoomExtension.ServiceHelpers
         {
             var worker = sender as BackgroundWorker;
             var args = e.Argument as MessageWorkerEventArgs;
-            
+
             try
             {
                 // Get Lock
@@ -186,7 +187,8 @@ namespace TeamRoomExtension.ServiceHelpers
 
         private void BackgroundWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
-            try {
+            try
+            {
                 // work complete           
 
                 if (e.Cancelled == true)
@@ -218,9 +220,9 @@ namespace TeamRoomExtension.ServiceHelpers
             catch (Exception ex)
             {
             }
-            
+
         }
-        
+
         #endregion Events
 
         private void SetWaitTimeout()
@@ -236,7 +238,7 @@ namespace TeamRoomExtension.ServiceHelpers
             {
                 waitTimeout = 10 * 1000;
             }
-            else if (ts < (30 *60))
+            else if (ts < (30 * 60))
             {
                 waitTimeout = 15 * 1000;
             }
@@ -244,7 +246,8 @@ namespace TeamRoomExtension.ServiceHelpers
             {
                 waitTimeout = 30 * 1000;
             }
-            else {
+            else
+            {
                 waitTimeout = 60 * 1000;
             }
         }
@@ -271,4 +274,5 @@ namespace TeamRoomExtension.ServiceHelpers
         public IEnumerable<Message> Messages { get; set; }
         public string Status { get; set; }
     }
+
 }

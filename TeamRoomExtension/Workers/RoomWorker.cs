@@ -24,6 +24,9 @@ namespace TeamRoomExtension.ServiceHelpers
         public BackgroundWorker LoadRoomsWorker;
         public BackgroundWorker PollRoomUsersWorker;
 
+        public delegate void LoadRoomsWorkerCompleteHandler(object sender, RoomWorkerCompleteResult e);
+        public delegate void PollRoomUserWorkerProgressHandler(object sender, RoomUserWorkerReportProgress e);
+
         public int RoomId;
         public Uri ProjectionCollectionUri;
 
@@ -71,7 +74,7 @@ namespace TeamRoomExtension.ServiceHelpers
             return false;
         }
 
-        public bool PollRoomUsers(Uri projectionCollectionUri, int roomId, ProgressChangedEventHandler progressHandler, RunWorkerCompletedEventHandler completedHandler)
+        public bool PollRoomUsers(Uri projectionCollectionUri, int roomId, PollRoomUserWorkerProgressHandler progressHandler, RunWorkerCompletedEventHandler completedHandler)
         {
             try
             {
@@ -80,7 +83,18 @@ namespace TeamRoomExtension.ServiceHelpers
 
                 if (PollRoomUsersWorker != null && PollRoomUsersWorker.IsBusy) return false;
 
-                if (PollRoomUsersWorker == null) PollRoomUsersWorker = CreateWorker(PollRoomUsersWorker_DoWork, progressHandler, completedHandler);
+                if (PollRoomUsersWorker == null)
+                {
+                    //PollRoomUsersWorker = CreateWorker(PollRoomUsersWorker_DoWork, progressHandler, completedHandler);
+                    PollRoomUsersWorker = new BackgroundWorker();
+                    PollRoomUsersWorker.WorkerReportsProgress = true;
+                    PollRoomUsersWorker.WorkerSupportsCancellation = true;
+
+                    PollRoomUsersWorker.DoWork += new DoWorkEventHandler(PollRoomUsersWorker_DoWork);
+                    PollRoomUsersWorker.ProgressChanged += progressHandler;
+                    PollRoomUsersWorker.RunWorkerCompleted += new RunWorkerCompletedEventHandler(completedHandler);
+
+                }
 
                 PollRoomUsersWorker.RunWorkerAsync();
 
@@ -186,4 +200,28 @@ namespace TeamRoomExtension.ServiceHelpers
 
         #endregion
     }
+
+
+    public class RoomWorkerCompleteResult : RunWorkerCompletedEventArgs
+    {
+        public Uri ConnectionUri;
+        public int RoomId;
+        public IEnumerable<Room> Rooms { get; set; }
+
+        public RoomWorkerCompleteResult(object result, Exception error, bool cancelled) : base(result, error, cancelled)
+        {
+        }
+    }
+
+    public class RoomUserWorkerReportProgress : ProgressChangedEventArgs
+    {
+        public Uri ConnectionUri;
+        public int RoomId;
+        public IEnumerable<User> RoomUsers { get; set; }
+
+        public RoomUserWorkerReportProgress(int progressPercentage, object userState) : base(progressPercentage, userState)
+        {
+        }
+    }
+
 }
