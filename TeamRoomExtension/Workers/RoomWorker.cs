@@ -10,6 +10,7 @@ namespace TeamRoomExtension.ServiceHelpers
     using Microsoft.TeamFoundation.Framework.Common;
     using Microsoft.VisualStudio.Services.WebApi;
     using System.Collections.Generic;
+
     public sealed class RoomWorker
     {
         // Singleton Instance
@@ -200,8 +201,7 @@ namespace TeamRoomExtension.ServiceHelpers
 
         #endregion
     }
-
-
+    
     public class RoomWorkerCompleteResult : RunWorkerCompletedEventArgs
     {
         public Uri ConnectionUri;
