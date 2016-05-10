@@ -323,7 +323,8 @@ namespace TeamRoomExtension
         private void MessagesWatcher_NewMessages(object sender, TeamRoomMessages e)
         {
             if (e.Messages == null || !e.Messages.Any() ||
-                e.RoomId != teamRoom.Id || e.ConnectionUri != projectCollectionUri)
+                (teamRoom != null && e.RoomId != teamRoom.Id) || 
+                e.ConnectionUri != projectCollectionUri)
             {
                 return;
             }
@@ -442,7 +443,7 @@ namespace TeamRoomExtension
 
         private void LoadRoomUsers(TeamRoomUsers roomUsers)
         {
-            if (roomUsers.RoomId != teamRoom.Id || roomUsers.ConnectionUri != projectCollectionUri)
+            if ((teamRoom != null && roomUsers.RoomId != teamRoom.Id) || roomUsers.ConnectionUri != projectCollectionUri)
                 return;
 
             RoomUsers.Clear();
