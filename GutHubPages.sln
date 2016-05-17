@@ -1,0 +1,26 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 14
+VisualStudioVersion = 14.0.25123.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{6068A253-D136-456A-BB8D-A7028EA05E81}"
+	ProjectSection(SolutionItems) = preProject
+		index.html = index.html
+		params.json = params.json
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Stylesheets", "Stylesheets", "{12FBFF03-4300-4B99-AD4F-1BF4E0731AFF}"
+	ProjectSection(SolutionItems) = preProject
+		stylesheets\github-light.css = stylesheets\github-light.css
+		stylesheets\normalize.css = stylesheets\normalize.css
+		stylesheets\stylesheet.css = stylesheets\stylesheet.css
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{12FBFF03-4300-4B99-AD4F-1BF4E0731AFF} = {6068A253-D136-456A-BB8D-A7028EA05E81}
+	EndGlobalSection
+EndGlobal
