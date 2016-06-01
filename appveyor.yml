@@ -1,8 +1,6 @@
 image: Visual Studio 2015
 
 install:
-#- ps: (new-object Net.WebClient).DownloadString("https://raw.github.com/madskristensen/ExtensionScripts/master/AppVeyor/vsix.ps1") | iex
-#- ps: (new-object net.webclient).DownloadString('https://raw.githubusercontent.com/JoeBradley/TeamRoomExtension/release/release-0.1/BuildScript.ps1') | iex
 - ps: (new-object net.webclient).DownloadString('https://raw.githubusercontent.com/JoeBradley/TeamRoomExtension/' + $env:APPVEYOR_REPO_BRANCH + '/BuildScript.ps1') | iex
 
 
@@ -15,7 +13,6 @@ build_script:
 
 after_test:
   - ps: Vsix-PushArtifacts 
-  #| Vsix-PublishToGallery
 
 deploy:
   provider: Environment
