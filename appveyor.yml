@@ -16,3 +16,7 @@ build_script:
 after_test:
   - ps: Vsix-PushArtifacts 
   #| Vsix-PublishToGallery
+
+deploy:
+  provider: Environment
+  name: 'TeamRoom GutHub'
