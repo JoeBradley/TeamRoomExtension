@@ -235,5 +235,31 @@ namespace TeamRoomExtension.ServiceHelpers
             }
             return null;
         }
+
+        public static bool SignIntoRoom(Uri uri, int roomId, bool signIn) {
+            try
+            {
+                connectionUri = uri;
+
+                var client = tpc.GetClient<ChatHttpClient>();
+
+                TeamFoundationIdentity me;
+                tpc.GetAuthenticatedIdentity(out me);
+
+                if (me == null)
+                    return false;
+
+                if (signIn)
+                    client.JoinRoomAsync(roomId, me.TeamFoundationId);
+                else
+                    client.LeaveRoomAsync(roomId, me.TeamFoundationId);
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+            }
+            return false;
+        }
     }
 }

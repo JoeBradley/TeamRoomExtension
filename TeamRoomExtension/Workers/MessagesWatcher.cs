@@ -19,7 +19,7 @@ namespace TeamRoomExtension.ServiceHelpers
 
         // Worker Event Delegate and Handler
         public event ReportProgressEventHandler ReportProgress = delegate { };
-        public delegate void ReportProgressEventHandler(object sender, MessagesProgress e);
+        public delegate void ReportProgressEventHandler(object sender, TeamRoomMessages e);
 
         public event ReportCompleteEventHandler ReportComplete = delegate { };
         public delegate void ReportCompleteEventHandler(object sender, MessageWorkerCompleteResult e);
@@ -134,7 +134,7 @@ namespace TeamRoomExtension.ServiceHelpers
                         var messages = TfsServiceWrapper.GetRoomMessagesAsync(ProjectionCollectionUri, RoomId).Result;
                         var profiles = TfsServiceWrapper.GetUserProfileImages(messages.Select(x => x.PostedBy).Distinct().ToList());
                         UserWorker.Instance.GetProfiles(profiles);
-                        worker.ReportProgress(1, new MessagesProgress() { Messages = messages });
+                        worker.ReportProgress(1, new TeamRoomMessages() { Messages = messages, ConnectionUri = ProjectionCollectionUri, RoomId = RoomId });
                         if (!worker.CancellationPending && RoomId > 0 && ProjectionCollectionUri != null)
                         {
                             if (messages != null && messages.Any()) lastMessage = messages.Max(x => x.PostedTime);
@@ -182,7 +182,7 @@ namespace TeamRoomExtension.ServiceHelpers
             //Console.WriteLine("{0}: {1}%", e.UserState, e.ProgressPercentage);
 
             // Expose event
-            this.ReportProgress(this, e.UserState as MessagesProgress);
+            this.ReportProgress(this, e.UserState as TeamRoomMessages);
         }
 
         private void BackgroundWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
@@ -254,7 +254,7 @@ namespace TeamRoomExtension.ServiceHelpers
 
     }
 
-    public class MessagesProgress
+    public class TeamRoomMessages
     {
         public Uri ConnectionUri;
         public int RoomId;

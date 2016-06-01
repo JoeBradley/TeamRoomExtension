@@ -50,7 +50,7 @@ namespace TeamRoomExtension
         #region Private properties
 
         // Team Room Id loaded from saved User profile.  Should be used on first load to automatically select the last viewed team room.
-        int teamRoomId = 0;
+        int savedteamRoomId = 0;
 
         // Currently Selected Team Room
         Room teamRoom;
@@ -162,7 +162,7 @@ namespace TeamRoomExtension
                     Collections.Select(x => x.Uri).Contains(settings.ProjectCollectionUri))
                 {
                     projectCollectionUri = settings.ProjectCollectionUri;
-                    teamRoomId = settings.TeamRoomId;
+                    savedteamRoomId = settings.TeamRoomId;
 
                     if (projectCollectionUri != null && Collections.Select(x => x.Uri).Contains(projectCollectionUri))
                     {
@@ -179,6 +179,7 @@ namespace TeamRoomExtension
             }
             catch (Exception ex)
             {
+                throw ex;
             }
         }
 
@@ -219,7 +220,10 @@ namespace TeamRoomExtension
                     RoomWorker.Instance.LoadRooms(projectCollectionUri);
                 }
             }
-            catch { }
+            catch (Exception ex){
+
+                throw;
+            }
         }
 
         #region Events
@@ -252,13 +256,18 @@ namespace TeamRoomExtension
         }
 
         // Set the background worker to poll for messages for the selected room.
-        // TODO: Handle changing rooms
         private void cmbRoomList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             try
             {
+                // Clear messages and Room Users
                 messages.Clear();
                 RefreshMessages();
+
+                RoomUsers.Clear();
+                RefreshRoomUsers();
+
+                int oldRoomId = teamRoom == null ? 0 : teamRoom.Id;
 
                 if (cmbRoomList.SelectedValue == null || projectCollectionUri == null)
                     return;
@@ -266,6 +275,8 @@ namespace TeamRoomExtension
                 teamRoom = cmbRoomList.SelectedValue as Room;
                 if (teamRoom != null)
                 {
+                    SignIntoRoom(oldRoomId, teamRoom.Id);
+
                     TfsMonitor.Instance.DoWork(projectCollectionUri, teamRoom.Id);
                     RoomWorker.Instance.PollRoomUsers(projectCollectionUri, teamRoom.Id, PollRoomUsers_NewUsers, PollRoomUsers_Complete);
 
@@ -309,10 +320,11 @@ namespace TeamRoomExtension
 
         #region External Events
 
-        private void MessagesWatcher_NewMessages(object sender, MessagesProgress e)
+        private void MessagesWatcher_NewMessages(object sender, TeamRoomMessages e)
         {
             if (e.Messages == null || !e.Messages.Any() ||
-                e.RoomId != teamRoom.Id || e.ConnectionUri != projectCollectionUri)
+                (teamRoom != null && e.RoomId != teamRoom.Id) || 
+                e.ConnectionUri != projectCollectionUri)
             {
                 return;
             }
@@ -341,7 +353,7 @@ namespace TeamRoomExtension
                 TfsMonitor.Instance.DoWork(projectCollectionUri, teamRoom.Id);
         }
 
-        private void Rooms_Loaded(object sender, RoomWorkerCompleteResult e)
+        private void Rooms_Loaded(object sender, RunWorkerCompletedEventArgs e)
         {
             // work complete           
             if (e.Cancelled == true)
@@ -365,11 +377,11 @@ namespace TeamRoomExtension
             }
         }
 
-        private void PollRoomUsers_NewUsers(object sender, RoomUserWorkerReportProgress e)
+        private void PollRoomUsers_NewUsers(object sender, ProgressChangedEventArgs e)
         {
-            if (!(e.UserState is List<User>)) return;
+            if (!(e.UserState is TeamRoomUsers)) return;
 
-            List<User> users = e.UserState as List<User>;
+            TeamRoomUsers users = e.UserState as TeamRoomUsers;
             LoadRoomUsers(users);
         }
 
@@ -398,6 +410,13 @@ namespace TeamRoomExtension
 
         #endregion
 
+        private void SignIntoRoom(int oldRoomId, int newRoomId)
+        {
+            if (oldRoomId != 0)
+                TfsServiceWrapper.SignIntoRoom(projectCollectionUri, oldRoomId, false);
+            TfsServiceWrapper.SignIntoRoom(projectCollectionUri, newRoomId, true);
+        }
+
         private void LoadRooms(IEnumerable<Room> rooms)
         {
             Rooms.Clear();
@@ -408,11 +427,11 @@ namespace TeamRoomExtension
                 {
                     Rooms.Add(item);
                 }
-                if (teamRoomId != 0 && Rooms.Select(x => x.Id).Contains(teamRoomId))
+                if (savedteamRoomId != 0 && Rooms.Select(x => x.Id).Contains(savedteamRoomId))
                 {
                     foreach (Room item in cmbRoomList.Items)
                     {
-                        if (item.Id == teamRoomId)
+                        if (item.Id == savedteamRoomId)
                         {
                             cmbRoomList.SelectedIndex = cmbRoomList.Items.IndexOf(item);
                             break;
@@ -422,13 +441,16 @@ namespace TeamRoomExtension
             }
         }
 
-        private void LoadRoomUsers(IEnumerable<User> users)
+        private void LoadRoomUsers(TeamRoomUsers roomUsers)
         {
+            if ((teamRoom != null && roomUsers.RoomId != teamRoom.Id) || roomUsers.ConnectionUri != projectCollectionUri)
+                return;
+
             RoomUsers.Clear();
 
-            if (users != null)
+            if (roomUsers.Users != null)
             {
-                foreach (var item in users)
+                foreach (var item in roomUsers.Users.Where(x => x.IsOnline))
                 {
                     if (!UserWorker.Instance.ProfileImages.ContainsKey(item.UserRef.Id))
                     {

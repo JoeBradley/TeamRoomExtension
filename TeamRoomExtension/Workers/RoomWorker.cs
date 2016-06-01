@@ -10,6 +10,7 @@ namespace TeamRoomExtension.ServiceHelpers
     using Microsoft.TeamFoundation.Framework.Common;
     using Microsoft.VisualStudio.Services.WebApi;
     using System.Collections.Generic;
+    using System.Linq;
     public sealed class RoomWorker
     {
         // Singleton Instance
@@ -19,16 +20,20 @@ namespace TeamRoomExtension.ServiceHelpers
         private static readonly object SingletonLock = new Object();
         private static readonly object PollRoomUsersLock = new Object();
         private static readonly object LoadRoomsLock = new Object();
-        
+
         // Background worker
         public BackgroundWorker LoadRoomsWorker;
         public BackgroundWorker PollRoomUsersWorker;
 
-        public delegate void LoadRoomsWorkerCompleteHandler(object sender, RoomWorkerCompleteResult e);
-        public delegate void PollRoomUserWorkerProgressHandler(object sender, RoomUserWorkerReportProgress e);
+        //public delegate void LoadRoomsWorkerCompleteHandler(object sender, RoomWorkerCompleteResult e);
+        //public delegate void PollRoomUserWorkerProgressHandler(object sender, TeamRoomUsers e);
 
         public int RoomId;
         public Uri ProjectionCollectionUri;
+
+        private int waitTimeout = 0;
+        private const int maxtWaitTimeout = 3 * 60 * 1000;
+        private const int sleepPeriod = 3 * 1000;
 
         private RoomWorker()
         {
@@ -74,12 +79,13 @@ namespace TeamRoomExtension.ServiceHelpers
             return false;
         }
 
-        public bool PollRoomUsers(Uri projectionCollectionUri, int roomId, PollRoomUserWorkerProgressHandler progressHandler, RunWorkerCompletedEventHandler completedHandler)
+        public bool PollRoomUsers(Uri projectionCollectionUri, int roomId, ProgressChangedEventHandler progressHandler, RunWorkerCompletedEventHandler completedHandler)
         {
             try
             {
-                ProjectionCollectionUri = projectionCollectionUri; 
+                ProjectionCollectionUri = projectionCollectionUri;
                 RoomId = roomId;
+                waitTimeout = 0;
 
                 if (PollRoomUsersWorker != null && PollRoomUsersWorker.IsBusy) return false;
 
@@ -140,7 +146,7 @@ namespace TeamRoomExtension.ServiceHelpers
                 }
             }
             catch (Exception ex)
-            {                
+            {
                 Console.WriteLine("Background Worker Error: {0}", ex.Message);
             }
             finally
@@ -148,7 +154,7 @@ namespace TeamRoomExtension.ServiceHelpers
                 try
                 {
                     // Release CritSection Lock
-                   if (hasLock) Monitor.Exit(LoadRoomsLock);
+                    if (hasLock) Monitor.Exit(LoadRoomsLock);
                 }
                 catch (Exception ex)
                 {
@@ -168,14 +174,24 @@ namespace TeamRoomExtension.ServiceHelpers
                 // Get Lock
                 hasLock = Monitor.TryEnter(PollRoomUsersLock, 2 * 1000);
                 if (hasLock)
-                {                    
+                {
                     while (!worker.CancellationPending && ProjectionCollectionUri != null && RoomId > 0)
                     {
-                        List<User> users = TfsServiceWrapper.GetRoomUsersAsync(ProjectionCollectionUri, RoomId).Result;
-                        worker.ReportProgress(1, users);
+                        // Get a local copy of the properties (these may change whilst porocessing)
+                        var uri = ProjectionCollectionUri;
+                        var rId = RoomId;
+                        List<User> users = TfsServiceWrapper.GetRoomUsersAsync(uri, rId).Result;
+                        worker.ReportProgress(1, new TeamRoomUsers { Users = users, RoomId = rId, ConnectionUri = uri });
+
+                        SetWaitTimeout();
                         if (!worker.CancellationPending && RoomId > 0 && ProjectionCollectionUri != null)
                         {
-                            Thread.Sleep(20 * 1000);
+                            int slept = 0;
+                            while (slept < waitTimeout && !worker.CancellationPending)
+                            {
+                                Thread.Sleep(sleepPeriod);
+                                slept += sleepPeriod;
+                            }
                         }
                     }
                 }
@@ -189,18 +205,24 @@ namespace TeamRoomExtension.ServiceHelpers
                 try
                 {
                     // Release CritSection Lock
-                    if(hasLock)Monitor.Exit(PollRoomUsersLock);
+                    if (hasLock) Monitor.Exit(PollRoomUsersLock);
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine("Release Locks Error: {0}", ex.Message);
                 }
             }
+
+
         }
 
+        private void SetWaitTimeout()
+        {
+            waitTimeout = Math.Min(maxtWaitTimeout, waitTimeout + (10 * 1000));
+        }
         #endregion
-    }
 
+    }
 
     public class RoomWorkerCompleteResult : RunWorkerCompletedEventArgs
     {
@@ -213,15 +235,12 @@ namespace TeamRoomExtension.ServiceHelpers
         }
     }
 
-    public class RoomUserWorkerReportProgress : ProgressChangedEventArgs
+    public class TeamRoomUsers
     {
         public Uri ConnectionUri;
         public int RoomId;
-        public IEnumerable<User> RoomUsers { get; set; }
+        public IEnumerable<User> Users { get; set; }
 
-        public RoomUserWorkerReportProgress(int progressPercentage, object userState) : base(progressPercentage, userState)
-        {
-        }
     }
 
 }
