@@ -19,4 +19,4 @@ after_test:
 
 deploy:
   provider: Environment
-  name: 'TeamRoom GutHub'
+  name: TeamRoom GutHub
