@@ -1,3 +1,4 @@
+[![Build status](https://ci.appveyor.com/api/projects/status/ha9v2r1qyl9aal85?svg=true)](https://ci.appveyor.com/project/JoeBradley/teamroomextension)
 <section class="page-header">
 
 # Team Room Extension
