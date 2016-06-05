@@ -4,9 +4,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using TeamRoomExtension.Models;
 using TeamRoomExtension.ServiceHelpers;
+using TeamRoomExtension.Workers;
 
 namespace TeamRoomExtension.Helpers
 {
@@ -31,6 +33,9 @@ namespace TeamRoomExtension.Helpers
         List<RegisteredProjectCollection> ProjectCollections = new List<RegisteredProjectCollection>();
         List<ProjectCollectionTeamRoom> TeamRooms = new List<ProjectCollectionTeamRoom>();
 
+        // Team Room Monitors.  Save so we can cancel them later if needed.
+        List<TeamRoomMonitor> TeamRoomMonitors = new List<TeamRoomMonitor>();
+        
         #endregion
 
         #region Events
@@ -58,8 +63,11 @@ namespace TeamRoomExtension.Helpers
 
         private TeamProjectCollectionManager()
         {
-            // Get Team Project Collections
-            // Get Team Rooms
+            new Thread(() =>
+            {
+                // Get Team Project Collections
+                LoadProjectCollections();
+            }).Start();
         }
 
         #endregion
@@ -73,22 +81,34 @@ namespace TeamRoomExtension.Helpers
             NewRooms += new NewRoomsEventHandler(control.TeamRooms_Loaded);
             UsersChanged += new UsersChangedEventHandler(control.TeamRoomUsers_Changed);
             NewMessages += new NewMessagesEventHandler(control.TeamRoomMessages_NewMessages);
-            PollingComplete += new PollingCompleteEventHandler( control.TeamRoom_Changed);
+            PollingComplete += new PollingCompleteEventHandler(control.TeamRoom_Changed);
 
             // Call Event Handlers with any existing data
             if (ProjectCollections.Any())
                 control.RegisteredProjectCollection_Loaded(this, ProjectCollections);
             if (TeamRooms.Any())
-                control.TeamRooms_Loaded(this, TeamRooms.Select(x => new TeamRoomEventArgs { ProjectCollectionUri = x.ProjectCollectionUri, TeamRoom = x.TeamRoom } ).ToList());
-            foreach(var tr in TeamRooms)
+                control.TeamRooms_Loaded(this, TeamRooms.Select(x => new TeamRoomEventArgs { ProjectCollectionUri = x.ProjectCollectionUri, TeamRoom = x.TeamRoom }).ToList());
+            foreach (var tr in TeamRooms)
             {
                 if (tr.Users.Any())
                     control.TeamRoomUsers_Changed(this, new TeamRoomEventArgs<User> { TeamRoom = tr.TeamRoom, ProjectCollectionUri = tr.ProjectCollectionUri, Data = tr.Users });
                 if (tr.Messages.Any())
-                    control.TeamRoomMessages_NewMessages(this, new TeamRoomEventArgs<Message> { TeamRoom = tr.TeamRoom, ProjectCollectionUri = tr.ProjectCollectionUri, Data = tr.Messages });                
+                    control.TeamRoomMessages_NewMessages(this, new TeamRoomEventArgs<Message> { TeamRoom = tr.TeamRoom, ProjectCollectionUri = tr.ProjectCollectionUri, Data = tr.Messages });
             }
         }
 
+        public Message PostMessage(Uri projectCollectionUri, int teamRoomId, string message)
+        {
+            if (teamRoom == null || projectCollectionUri == null) return null;
+            
+                var msg = TfsServiceWrapper.PostMessage(projectCollectionUri, teamRoomId, message);
+                //var msg = new Message() { Content = txtMessage.Text, PostedTime= DateTime.UtcNow };
+                txtMessage.Text = "";
+                Messages.Add(msg);
+
+            TeamRoomMonitors.Single(x => x.ProjectCollectionUri == projectCollectionUri && x.TeamRoom.Id == teamRoomId).PollNow();
+            return msg;
+        }
         #endregion
 
         #region Private Methods
@@ -97,17 +117,66 @@ namespace TeamRoomExtension.Helpers
         {
             try
             {
-                foreach (var pc in TfsServiceWrapper.GetProjectCollections())
-                {
-                    ProjectCollections.Add(pc);
-                }
-                if (NewTeamProjectCollections != null)
-                    NewTeamProjectCollections(this, ProjectCollections);
+                // Get Team Project Collections
+                ProjectCollections.AddRange(TfsServiceWrapper.GetProjectCollections());
+                NewTeamProjectCollections?.Invoke(this, ProjectCollections);
+                
+                // Get Project Collction Team Rooms, Create Monitor, Start Polling
+                List<Task> tasks = ProjectCollections.Select(x => LoadTeamRoomAsync(x.Uri)).ToList();
+                Task.WaitAll(tasks.ToArray());                
             }
             catch (Exception ex)
             {
                 throw ex;
             }
+        }
+
+        private async Task LoadTeamRoomAsync(Uri projectCollectionUri)
+        {
+            var rooms = await TfsServiceWrapper.GetRoomsAsync(projectCollectionUri);
+
+            foreach (var room in rooms)
+            {
+                // Crate new Team Room Monitor
+                var trm = new TeamRoomMonitor(projectCollectionUri, room);
+
+                // Add event handlers
+                trm.NewMessages += new NewMessagesEventHandler(TeamRoomMessages_New);
+                trm.UsersChanged += new UsersChangedEventHandler(TeamRoomUsers_Changed);
+                trm.PollingComplete += new PollingCompleteEventHandler(TeamRoomPolling_Complete);
+
+                // Start Polling
+                trm.StartPolling();
+
+                // Save reference
+                TeamRooms.Add(new ProjectCollectionTeamRoom
+                {
+                    ProjectCollectionUri = projectCollectionUri,
+                    TeamRoom = room,
+                });
+            }
+        }
+
+        private void TeamRoomMessages_New(object sender, TeamRoomEventArgs<Message> e)
+        {
+            var tr = TeamRooms.Single(x => x.ProjectCollectionUri == e.ProjectCollectionUri && x.TeamRoom == e.TeamRoom);
+            tr.Messages.AddRange(e.Data);
+
+            NewMessages?.Invoke(this, e);
+        }
+
+        private void TeamRoomUsers_Changed(object sender, TeamRoomEventArgs<User> e)
+        {
+            var tr = TeamRooms.Single(x => x.ProjectCollectionUri == e.ProjectCollectionUri && x.TeamRoom == e.TeamRoom);
+            tr.Users.AddRange(e.Data);
+
+            UsersChanged?.Invoke(this, e);
+        }
+
+        private void TeamRoomPolling_Complete(object sender, TeamRoomEventArgs e)
+        {
+            TeamRooms.Remove(TeamRooms.Single(x => x.ProjectCollectionUri == e.ProjectCollectionUri && x.TeamRoom == e.TeamRoom));
+            PollingComplete?.Invoke(this, e);
         }
 
         #endregion

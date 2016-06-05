@@ -43,9 +43,10 @@ namespace TeamRoomExtension
     using System.Windows.Media.Imaging;
     using Microsoft.VisualStudio.Shell.Interop;
     using Workers;
-    using Models;    /// <summary>
-                     /// Interaction logic for TeamRoomWindowControl.
-                     /// </summary>
+    using Models;
+    using Helpers;/// <summary>
+                  /// Interaction logic for TeamRoomWindowControl.
+                  /// </summary>
     public partial class TeamRoomWindowControl : UserControl, INotifyPropertyChanged
     {
         #region Private properties
@@ -347,7 +348,33 @@ namespace TeamRoomExtension
 
         public void RegisteredProjectCollection_Loaded(object sender, List<RegisteredProjectCollection> e)
         {
+            if (e == null) return;
+
+            foreach (var projectCollection in e)
+            {
+                Collections.Add(projectCollection);
+            }
+
             // TODO: Add / Remove Registed Team Project Collection
+            var settings = TeamRoomWindowCommand.Instance.LoadUserSettings();
+
+            if (settings.ProjectCollectionUri != null && Collections.Select(x => x.Uri).Contains(settings.ProjectCollectionUri))
+            {
+                projectCollectionUri = settings.ProjectCollectionUri;
+                savedteamRoomId = settings.TeamRoomId;
+
+                if (projectCollectionUri != null && Collections.Select(x => x.Uri).Contains(projectCollectionUri))
+                {
+                    foreach (RegisteredProjectCollection item in cmbCollectionList.Items)
+                    {
+                        if (item.Uri == projectCollectionUri)
+                        {
+                            cmbCollectionList.SelectedIndex = cmbCollectionList.Items.IndexOf(item);
+                            break;
+                        }
+                    }
+                }
+            }
         }
 
         public void RegisteredProjectCollection_Changed(object sender, ProjectCollectionChangedEventArgs e)
@@ -356,11 +383,12 @@ namespace TeamRoomExtension
         }
 
         public void TeamRooms_Loaded(object sender, List<TeamRoomEventArgs> e)
-        {
+        {            
             // TODO: Add / Remove Team Room
+            // Get from local variable, or TeamProjectCollectionManager ????
         }
         public void TeamRoom_Changed(object sender, TeamRoomEventArgs e)
-        { 
+        {
             // TODO: Add / Remove Team Room
         }
 
@@ -393,7 +421,7 @@ namespace TeamRoomExtension
                 }
             }
         }
-        
+
         #endregion
 
         #region Private Methods
@@ -438,16 +466,12 @@ namespace TeamRoomExtension
         {
             try
             {
-                if (txtMessage.Text.Trim(' ') == "") return;
-
-                if (teamRoom != null && projectCollectionUri != null)
+                if (txtMessage.Text.Trim(' ') != "") return;
                 {
-                    var msg = TfsServiceWrapper.PostMessage(projectCollectionUri, teamRoom.Id, txtMessage.Text);
-                    //var msg = new Message() { Content = txtMessage.Text, PostedTime= DateTime.UtcNow };
-                    txtMessage.Text = "";
+                    var msg = TeamProjectCollectionManager.Instance.PostMessage(projectCollectionUri, teamRoom.Id, txtMessage.Text);
                     Messages.Add(msg);
-                    TfsMonitor.Instance.PollNow();
                 }
+                txtMessage.Text = "";
             }
             catch (Exception ex)
             {

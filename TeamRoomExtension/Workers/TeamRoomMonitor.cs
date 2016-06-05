@@ -26,13 +26,13 @@ namespace TeamRoomExtension.Workers
 
         #region public Events Raised
 
-        // Raised when new messages posted to the room
-        public event EventHandler<TeamRoomEventArgs<Message>> NewMessages;
-        public event EventHandler<TeamRoomEventArgs<User>> UsersChanged;
+        // New Messages or changes to Room Users
+        public event NewMessagesEventHandler NewMessages;
+        public event UsersChangedEventHandler UsersChanged;
 
         // Raised when both polling workers are complete (i.e. cancelled)
-        public event EventHandler<TeamRoomEventArgs> PollingComplete;
-        
+        public event PollingCompleteEventHandler PollingComplete;
+
         #endregion
 
         #region Timer Properties (in Miliseconds)
@@ -52,27 +52,27 @@ namespace TeamRoomExtension.Workers
         #region Private variables
 
         // Team Room Properties
-        Uri ProjectCollectionUri;
-        Room TeamRoom;
+        public Uri ProjectCollectionUri;
+        public Room TeamRoom;
 
         // Timer variables
         int MessagePollWaitTimeout = 0;
         private DateTime MessagesLastChange = DateTime.MinValue;
-        
+
         int UsersPollWaitTimeout = 0;
         private DateTime UsersLastChange = DateTime.MinValue;
-        
+
         #endregion
 
         #region Constructors
 
-        public TeamRoomMonitor(Uri projectionCollectionUri, Room teamRoom) {
+        public TeamRoomMonitor(Uri projectionCollectionUri, Room teamRoom)
+        {
 
             ProjectCollectionUri = projectionCollectionUri;
             TeamRoom = teamRoom;
 
             InitWorkers(PollMessages, PollUsers);
-            StartPolling();
         }
 
         // Overloaded Constructor for unit testing.  Inject BackgroundWorker event handlers.
@@ -82,9 +82,8 @@ namespace TeamRoomExtension.Workers
             TeamRoom = teamRoom;
 
             InitWorkers(pollMessagesWorker, pollUsersWorker);
-            StartPolling();
         }
-        
+
         #endregion
 
         /// <summary>
@@ -110,7 +109,7 @@ namespace TeamRoomExtension.Workers
                 UsersMonitor.RunWorkerCompleted += WorkerComplete;
             }
         }
-        
+
         #region BGW Delegates
 
         /// <summary>
@@ -129,7 +128,7 @@ namespace TeamRoomExtension.Workers
 
                     // Check for changes to the users, raise event, set the polling wait time out
                     MessagePollWaitTimeout = CheckNewMessges(messages) ? GetFibonacciBackoff(MessagePollWaitTimeout, MaxMessagePollPeriodMs) : MinMessagePollPeriodMs;
-                    
+
                     int slept = 0;
                     while (slept < MessagePollWaitTimeout && !MessageMonitor.CancellationPending)
                     {
@@ -151,7 +150,8 @@ namespace TeamRoomExtension.Workers
         /// <param name="e"></param>
         private void PollUsers(object sender, DoWorkEventArgs e)
         {
-            try {
+            try
+            {
                 while (!UsersMonitor.CancellationPending && ProjectCollectionUri != null && TeamRoom != null)
                 {
                     // Get a local copy of the properties (these may change whilst porocessing)
@@ -166,7 +166,7 @@ namespace TeamRoomExtension.Workers
                     {
                         Thread.Sleep(sleepPeriodMs);
                         slept += sleepPeriodMs;
-                    }                    
+                    }
                 }
             }
             catch (Exception)
@@ -181,10 +181,10 @@ namespace TeamRoomExtension.Workers
             {
                 // Load any missing user profiles
                 UserProfileManager.LoadUserProfiles(ProjectCollectionUri, messages.Select(x => x.PostedBy).ToList());
-                
+
                 // Raise Event Handler
                 NewMessages(this, new TeamRoomEventArgs<Message> { ProjectCollectionUri = ProjectCollectionUri, TeamRoom = TeamRoom, Data = messages.Where(x => x.PostedTime > MessagesLastChange).ToList() });
-                
+
                 // Update date of last message posted to the Team Room
                 MessagesLastChange = messages.Max(x => x.PostedTime);
                 return true;
@@ -195,17 +195,17 @@ namespace TeamRoomExtension.Workers
         private bool CheckChangedUsers(List<User> newUsers)
         {
             var changed = false;
-            
+
             foreach (var user in newUsers)
             {
                 if (user.JoinedDate > UsersLastChange || user.LastActivity > UsersLastChange)
                 {
                     // Load any missing user profiles
                     UserProfileManager.LoadUserProfiles(ProjectCollectionUri, newUsers.Select(x => x.UserRef).ToList());
-                    
+
                     // Raise Event Handler
                     UsersChanged(this, new TeamRoomEventArgs<User> { ProjectCollectionUri = ProjectCollectionUri, TeamRoom = TeamRoom, Data = newUsers });
-                    
+
                     UsersLastChange = DateTime.UtcNow;
                     changed = true;
 
@@ -226,12 +226,18 @@ namespace TeamRoomExtension.Workers
             var messagesComplete = MessageMonitor == null || !MessageMonitor.IsBusy;
             var usersComplete = UsersMonitor == null || !UsersMonitor.IsBusy;
 
-            if (messagesComplete && usersComplete) PollingComplete(this,null);            
+            if (messagesComplete && usersComplete) PollingComplete(this, null);
         }
 
         #endregion
 
         #region Public Methods
+        public void StartPolling()
+        {
+            MessageMonitor.RunWorkerAsync();
+            UsersMonitor.RunWorkerAsync();
+        }
+
         public void StopPolling()
         {
             MessageMonitor.CancelAsync();
@@ -246,16 +252,12 @@ namespace TeamRoomExtension.Workers
         #endregion
 
         #region Private Methods
-        private void StartPolling()
-        {
-            MessageMonitor.RunWorkerAsync();
-            UsersMonitor.RunWorkerAsync();
-        }
+
 
         private int GetNewTimeout(int currentTimeout, int maxTimeout)
         {
-            var attempts = Math.Sqrt( ((double)currentTimeout * 2d) + 1d);
-            return Convert.ToInt32( Math.Min(maxTimeout, Math.Pow(2d,attempts)/2d));        
+            var attempts = Math.Sqrt(((double)currentTimeout * 2d) + 1d);
+            return Convert.ToInt32(Math.Min(maxTimeout, Math.Pow(2d, attempts) / 2d));
         }
 
         private int GetFibonacciBackoff(int currentTimeout, int maxTimeout)
@@ -264,7 +266,7 @@ namespace TeamRoomExtension.Workers
 
             var n = currentTimeout / 1000;
             var m = maxTimeout / 1000;
-            
+
             int a = 0;
             int b = 1;
 
