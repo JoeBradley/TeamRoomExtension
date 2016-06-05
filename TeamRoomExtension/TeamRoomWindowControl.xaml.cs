@@ -42,9 +42,10 @@ namespace TeamRoomExtension
     using Microsoft.TeamFoundation.Framework.Common;
     using System.Windows.Media.Imaging;
     using Microsoft.VisualStudio.Shell.Interop;
-    /// <summary>
-    /// Interaction logic for TeamRoomWindowControl.
-    /// </summary>
+    using Workers;
+    using Models;    /// <summary>
+                     /// Interaction logic for TeamRoomWindowControl.
+                     /// </summary>
     public partial class TeamRoomWindowControl : UserControl, INotifyPropertyChanged
     {
         #region Private properties
@@ -79,6 +80,8 @@ namespace TeamRoomExtension
 
         // Does the window have focus?
         bool StatusSet = false;
+
+        #region UI Bound Properties
 
         // User Project Collections
         ObservableCollection<RegisteredProjectCollection> collections = new ObservableCollection<RegisteredProjectCollection>();
@@ -116,6 +119,8 @@ namespace TeamRoomExtension
             }
         }
 
+        #endregion
+
         // Property CHanged event handler.  Needed for ObservableCollections (??? - still not sure how they work)
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged(string name)
@@ -128,6 +133,8 @@ namespace TeamRoomExtension
         }
 
         #endregion
+
+        #region Constructors
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TeamRoomWindowControl"/> class.
@@ -142,91 +149,16 @@ namespace TeamRoomExtension
 
             // Set the event handler directly on the background worker
             RoomWorker.Instance.LoadRoomsWorker.RunWorkerCompleted += Rooms_Loaded;
-            
+
             UserWorker.Instance.Worker.RunWorkerCompleted += ProfilePictures_Loaded;
 
             LoadProjectCollections();
         }
 
-        private void LoadProjectCollections()
-        {
-            try
-            {
-                foreach (var pc in TfsServiceWrapper.GetProjectCollections())
-                {
-                    Collections.Add(pc);
-                }
-                var settings = TeamRoomWindowCommand.Instance.LoadUserSettings();
-
-                if (settings.ProjectCollectionUri != null &&
-                    Collections.Select(x => x.Uri).Contains(settings.ProjectCollectionUri))
-                {
-                    projectCollectionUri = settings.ProjectCollectionUri;
-                    savedteamRoomId = settings.TeamRoomId;
-
-                    if (projectCollectionUri != null && Collections.Select(x => x.Uri).Contains(projectCollectionUri))
-                    {
-                        foreach (RegisteredProjectCollection item in cmbCollectionList.Items)
-                        {
-                            if (item.Uri == projectCollectionUri)
-                            {
-                                cmbCollectionList.SelectedIndex = cmbCollectionList.Items.IndexOf(item);
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                throw ex;
-            }
-        }
-
-        // Post a new message.  Set the MessagesWacther timeout periof to 0 so its starts polling at minimal intervals again.
-        private void PostMessage()
-        {
-            try
-            {
-                if (txtMessage.Text.Trim(' ') == "") return;
-
-                if (teamRoom != null && projectCollectionUri != null)
-                {
-                    var msg = TfsServiceWrapper.PostMessage(projectCollectionUri, teamRoom.Id, txtMessage.Text);
-                    //var msg = new Message() { Content = txtMessage.Text, PostedTime= DateTime.UtcNow };
-                    txtMessage.Text = "";
-                    Messages.Add(msg);
-                    TfsMonitor.Instance.PollNow();
-                }
-            }
-            catch (Exception ex)
-            {
-            }
-        }
-
-        // Call the Worker thread to load the list of rooms for the connected project service uri
-        private void LoadRooms()
-        {
-            try
-            {
-                TeamRoomWindowCommand.Instance.LogMessage("Loading Rooms");
-
-                RoomUsers.Clear();
-                teamRoom = null;
-                Rooms.Clear();
-                cmbRoomList.Text = "Loading Team Rooms...";
-                if (projectCollectionUri != null)
-                {
-                    RoomWorker.Instance.LoadRooms(projectCollectionUri);
-                }
-            }
-            catch (Exception ex){
-
-                throw;
-            }
-        }
+        #endregion
 
         #region Events
+
 
         // Cancel Background worker threads    
         private void TeamRoomWindow_Unload(object sender, RoutedEventArgs e)
@@ -238,12 +170,12 @@ namespace TeamRoomExtension
         private void cmbCollectionList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             try
-            {           
+            {
                 Messages.Clear();
                 RefreshMessages();
                 RoomUsers.Clear();
                 RefreshRoomUsers();
-                
+
                 var projectCollection = cmbCollectionList.SelectedValue as RegisteredProjectCollection;
                 if (projectCollection != null) projectCollectionUri = projectCollection.Uri;
                 LoadRooms();
@@ -323,7 +255,7 @@ namespace TeamRoomExtension
         private void MessagesWatcher_NewMessages(object sender, TeamRoomMessages e)
         {
             if (e.Messages == null || !e.Messages.Any() ||
-                (teamRoom != null && e.RoomId != teamRoom.Id) || 
+                (teamRoom != null && e.RoomId != teamRoom.Id) ||
                 e.ConnectionUri != projectCollectionUri)
             {
                 return;
@@ -343,7 +275,7 @@ namespace TeamRoomExtension
             svMessages.ScrollToEnd();
             if (messagesAdded > 0)
             {
-                SetStatusMessage(messagesAdded);
+                SetStatusMessage(teamRoom.Name, messagesAdded);
             }
         }
 
@@ -410,6 +342,141 @@ namespace TeamRoomExtension
 
         #endregion
 
+
+        #region Event Handlers
+
+        public void RegisteredProjectCollection_Loaded(object sender, List<RegisteredProjectCollection> e)
+        {
+            // TODO: Add / Remove Registed Team Project Collection
+        }
+
+        public void RegisteredProjectCollection_Changed(object sender, ProjectCollectionChangedEventArgs e)
+        {
+            // TODO: Add / Remove Registed Team Project Collection
+        }
+
+        public void TeamRooms_Loaded(object sender, List<TeamRoomEventArgs> e)
+        {
+            // TODO: Add / Remove Team Room
+        }
+        public void TeamRoom_Changed(object sender, TeamRoomEventArgs e)
+        { 
+            // TODO: Add / Remove Team Room
+        }
+
+        public void TeamRoomMessages_NewMessages(object sender, TeamRoomEventArgs<Message> e)
+        {
+            if (teamRoom != null && e.TeamRoom.Id == teamRoom.Id && e.ProjectCollectionUri == projectCollectionUri)
+            {
+                foreach (var item in messages)
+                {
+                    if (!Messages.Select(x => x.Id).Contains(item.Id))
+                    {
+                        Messages.Add(item);
+                    }
+                }
+                svMessages.ScrollToEnd();
+            }
+
+            if (e.Data.Any())
+                SetStatusMessage(e.TeamRoom.Name, e.Data.Count);
+        }
+
+        public void TeamRoomUsers_Changed(object sender, TeamRoomEventArgs<User> e)
+        {
+            if (teamRoom != null && e.TeamRoom.Id == teamRoom.Id && e.ProjectCollectionUri == projectCollectionUri)
+            {
+                RoomUsers.Clear();
+                foreach (var item in e.Data.Where(x => x.IsOnline))
+                {
+                    RoomUsers.Add(item);
+                }
+            }
+        }
+        
+        #endregion
+
+        #region Private Methods
+
+
+        private void LoadProjectCollections()
+        {
+            try
+            {
+                foreach (var pc in TfsServiceWrapper.GetProjectCollections())
+                {
+                    Collections.Add(pc);
+                }
+                var settings = TeamRoomWindowCommand.Instance.LoadUserSettings();
+
+                if (settings.ProjectCollectionUri != null && Collections.Select(x => x.Uri).Contains(settings.ProjectCollectionUri))
+                {
+                    projectCollectionUri = settings.ProjectCollectionUri;
+                    savedteamRoomId = settings.TeamRoomId;
+
+                    if (projectCollectionUri != null && Collections.Select(x => x.Uri).Contains(projectCollectionUri))
+                    {
+                        foreach (RegisteredProjectCollection item in cmbCollectionList.Items)
+                        {
+                            if (item.Uri == projectCollectionUri)
+                            {
+                                cmbCollectionList.SelectedIndex = cmbCollectionList.Items.IndexOf(item);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+
+        // Post a new message.  Set the MessagesWacther timeout periof to 0 so its starts polling at minimal intervals again.
+        private void PostMessage()
+        {
+            try
+            {
+                if (txtMessage.Text.Trim(' ') == "") return;
+
+                if (teamRoom != null && projectCollectionUri != null)
+                {
+                    var msg = TfsServiceWrapper.PostMessage(projectCollectionUri, teamRoom.Id, txtMessage.Text);
+                    //var msg = new Message() { Content = txtMessage.Text, PostedTime= DateTime.UtcNow };
+                    txtMessage.Text = "";
+                    Messages.Add(msg);
+                    TfsMonitor.Instance.PollNow();
+                }
+            }
+            catch (Exception ex)
+            {
+            }
+        }
+
+        // Call the Worker thread to load the list of rooms for the connected project service uri
+        private void LoadRooms()
+        {
+            try
+            {
+                TeamRoomWindowCommand.Instance.LogMessage("Loading Rooms");
+
+                RoomUsers.Clear();
+                teamRoom = null;
+                Rooms.Clear();
+                cmbRoomList.Text = "Loading Team Rooms...";
+                if (projectCollectionUri != null)
+                {
+                    RoomWorker.Instance.LoadRooms(projectCollectionUri);
+                }
+            }
+            catch (Exception ex)
+            {
+
+                throw;
+            }
+        }
+
         private void SignIntoRoom(int oldRoomId, int newRoomId)
         {
             if (oldRoomId != 0)
@@ -462,11 +529,11 @@ namespace TeamRoomExtension
             }
         }
 
-        private void SetStatusMessage(int messages)
+        private void SetStatusMessage(string teamRoom, int messages)
         {
             if (!this.HasEffectiveKeyboardFocus && teamRoom != null)
             {
-                TeamRoomWindowCommand.Instance.SetStatusMessage(string.Format("{0} new message{1} from {2} team room", messages, messages == 1? "":"s", teamRoom.Name));
+                TeamRoomWindowCommand.Instance.SetStatusMessage(string.Format("{0} new message{1} from {2} team room", messages, messages == 1 ? "" : "s", teamRoom));
                 StatusSet = true;
             }
         }
@@ -489,5 +556,7 @@ namespace TeamRoomExtension
             StatusSet = false;
             TeamRoomWindowCommand.Instance.ClearStatusMessage();
         }
+
+        #endregion
     }
 }

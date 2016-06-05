@@ -6,7 +6,8 @@ using System.Threading;
 using System.Windows.Media;
 
 namespace TeamRoomExtension.ServiceHelpers
-{
+{    
+
     public sealed class UserWorker
     {
         #region Const
